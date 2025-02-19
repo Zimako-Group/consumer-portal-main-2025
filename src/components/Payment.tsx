@@ -242,13 +242,13 @@ export default function Payment() {
             <div className="flex justify-between items-center">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Amount Due</p>
-                <p className="text-base sm:text-xl font-bold text-gray-900 dark:text-white">
+                <p className="text-sm sm:text-base lg:text-lg font-bold text-gray-900 dark:text-white">
                   {formatCurrency(paymentDetails.amountDue)}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Due Date</p>
-                <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
+                <p className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 dark:text-white">
                   {paymentDetails.dueDate ? format(new Date(paymentDetails.dueDate), 'PPP') : 'Not set'}
                 </p>
               </div>
