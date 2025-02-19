@@ -77,6 +77,9 @@ export default function MeterReadings() {
     photo: null
   });
   const [customerMeterNumber, setCustomerMeterNumber] = useState<string>('');
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = React.createRef<HTMLVideoElement>();
+  const canvasRef = React.createRef<HTMLCanvasElement>();
 
   // Reset form data when modal opens
   useEffect(() => {
@@ -198,6 +201,63 @@ export default function MeterReadings() {
 
     fetchMeterReadings();
   }, [currentUser, userData]);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+
+    const startCamera = async () => {
+      try {
+        if (showCamera) {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' }, // Use back camera if available
+            audio: false 
+          });
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        }
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        toast.error('Unable to access camera. Please ensure you have given camera permissions.');
+      }
+    };
+
+    startCamera();
+
+    // Cleanup function
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [showCamera]);
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      // Set canvas size to match video dimensions
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // Draw video frame to canvas
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert canvas to blob
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            const file = new File([blob], 'meter-reading.jpg', { type: 'image/jpeg' });
+            setFormData(prev => ({ ...prev, photo: file }));
+            setShowCamera(false);
+          }
+        }, 'image/jpeg', 0.8);
+      }
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value, type, files } = e.target;
@@ -332,37 +392,6 @@ export default function MeterReadings() {
     }
   };
 
-  const uploadPhotoToCloudinary = async (photo: File) => {
-    try {
-      toast.loading('Uploading photo...');
-      const formData = new FormData();
-      formData.append('file', photo);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-      console.log('Attempting to upload to Cloudinary...');
-      const response = await fetch(CLOUDINARY_UPLOAD_URL, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Cloudinary upload failed:', errorData);
-        toast.error(`Upload failed: ${response.statusText}`);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log('Cloudinary upload response:', data);
-      toast.success('Photo uploaded successfully!');
-      return data.secure_url;
-    } catch (error) {
-      console.error('Error uploading photo to Cloudinary:', error);
-      toast.error('Failed to upload photo. Please try again.');
-      return null;
-    }
-  };
-
   const exportToCSV = () => {
     try {
       const headers = ['Date', 'Meter Number', 'Previous Reading', 'Current Reading', 'Consumption'];
@@ -413,14 +442,6 @@ export default function MeterReadings() {
         return;
       }
 
-      console.log('Starting upload process...');
-      const photoUrl = await uploadPhotoToCloudinary(formData.photo);
-      
-      if (!photoUrl) {
-        toast.error('Failed to upload photo');
-        return;
-      }
-
       const lastReading = data[0]?.currentReading || 0;
       const currentReading = parseInt(formData.currentReading);
       
@@ -438,7 +459,7 @@ export default function MeterReadings() {
         previousReading: lastReading,
         currentReading: currentReading,
         consumption: currentReading - lastReading,
-        photoUrl,
+        photoUrl: URL.createObjectURL(formData.photo),
         currentReadingDate: new Date(),
       };
 
@@ -832,28 +853,63 @@ export default function MeterReadings() {
                 </div>
 
                 <div>
-                  <label htmlFor="file-upload" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="camera-capture" className="block text-sm font-medium text-gray-700">
                     Reading Photo
                   </label>
                   <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
                     <div className="space-y-1 text-center">
-                      {formData.photo ? (
+                      {showCamera ? (
+                        <div className="flex flex-col items-center">
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            className="h-64 w-full object-cover rounded-lg mb-2"
+                          />
+                          <canvas ref={canvasRef} style={{ display: 'none' }} />
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={capturePhoto}
+                              className="px-4 py-2 text-sm font-medium text-white bg-theme rounded-md shadow-sm hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme"
+                            >
+                              Take Photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowCamera(false)}
+                              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : formData.photo ? (
                         <div className="flex flex-col items-center">
                           <img
                             src={URL.createObjectURL(formData.photo)}
                             alt="Preview"
-                            className="h-32 w-32 object-cover rounded-lg mb-2"
+                            className="h-64 w-full object-cover rounded-lg mb-2"
                           />
-                          <button
-                            type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, photo: null }))}
-                            className="text-sm text-red-600 hover:text-red-800"
-                          >
-                            Remove photo
-                          </button>
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowCamera(true)}
+                              className="text-sm text-theme hover:text-theme/90"
+                            >
+                              Retake photo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, photo: null }))}
+                              className="text-sm text-red-600 hover:text-red-800"
+                            >
+                              Remove photo
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <>
+                        <div className="flex flex-col items-center">
                           <svg
                             className="mx-auto h-12 w-12 text-gray-400"
                             stroke="currentColor"
@@ -868,26 +924,17 @@ export default function MeterReadings() {
                               strokeLinejoin="round"
                             />
                           </svg>
-                          <div className="flex text-sm text-gray-600">
-                            <label
-                              htmlFor="file-upload"
-                              className="relative cursor-pointer rounded-md font-medium text-theme hover:text-theme/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-theme"
-                            >
-                              <span>Upload a file</span>
-                              <input
-                                id="file-upload"
-                                name="file-upload"
-                                type="file"
-                                className="sr-only"
-                                accept="image/*"
-                                onChange={handleInputChange}
-                                required
-                              />
-                            </label>
-                            <p className="pl-1">or drag and drop</p>
-                          </div>
-                          <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                        </>
+                          <button
+                            type="button"
+                            onClick={() => setShowCamera(true)}
+                            className="mt-2 px-4 py-2 text-sm font-medium text-white bg-theme rounded-md shadow-sm hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme"
+                          >
+                            Take Photo
+                          </button>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Use your device's camera to take a clear photo of your meter reading
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>
