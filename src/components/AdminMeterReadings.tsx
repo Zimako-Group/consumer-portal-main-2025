@@ -157,7 +157,10 @@ export default function AdminMeterReadings() {
           toolbar: {
             show: false
           },
-          background: 'transparent'
+          background: 'transparent',
+          zoom: {
+            enabled: true
+          }
         },
         dataLabels: {
           enabled: false
@@ -184,21 +187,24 @@ export default function AdminMeterReadings() {
             const date = reading.currentReadingDate instanceof Date 
               ? reading.currentReadingDate 
               : new Date(reading.currentReadingDate);
-            return format(date, 'MMM yyyy');
+            return format(date, 'dd/MM/yyyy');
           }),
           labels: {
             style: {
               colors: isDarkMode ? '#fff' : '#000'
             },
             rotate: -45,
-            rotateAlways: false
+            rotateAlways: true,
+            trim: false,
+            minHeight: 60
           },
           axisBorder: {
             show: false
           },
           axisTicks: {
             show: false
-          }
+          },
+          tickAmount: Math.min(sortedData.length, 10) // Show at most 10 ticks
         },
         yaxis: {
           labels: {
@@ -220,6 +226,9 @@ export default function AdminMeterReadings() {
             lines: {
               show: true
             }
+          },
+          padding: {
+            bottom: 20
           }
         },
         tooltip: {
@@ -228,7 +237,8 @@ export default function AdminMeterReadings() {
             formatter: (value: number) => value.toFixed(2)
           },
           x: {
-            formatter: (value: string) => value
+            show: true,
+            format: 'dd/MM/yyyy'
           }
         }
       },
