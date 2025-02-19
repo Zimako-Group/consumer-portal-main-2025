@@ -12,7 +12,7 @@ import {
 import { Search, Loader2, TrendingUp, TrendingDown, AlertTriangle, Plus, Download, LineChart } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit, doc, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
@@ -618,330 +618,197 @@ export default function MeterReadings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
     const toastId = toast.loading('Processing submission...');
-    
+
     try {
-      if (!formData.photo) {
-        toast.error('Please take a photo of your meter reading', { id: toastId });
-        return;
-      }
-
-      if (!userLocation) {
-        toast.error('Location data is required. Please allow location access and try again.', { id: toastId });
-        return;
-      }
-
       if (!userData?.accountNumber) {
-        toast.error('Account number is required', { id: toastId });
+        toast.error('Account number not found', { id: toastId });
         return;
       }
 
-      const lastReading = data[0]?.currentReading || 0;
-      const currentReading = parseInt(formData.currentReading);
+      // Get current date components
+      const now = new Date();
+      const year = now.getFullYear().toString();
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+      const day = now.getDate().toString().padStart(2, '0');
       
-      // Enhanced validation
-      const error = validateReading(currentReading, lastReading, formData.meterType);
-      if (error) {
-        if (error.startsWith('Warning:')) {
-          const proceed = window.confirm(`${error}\n\nDo you want to proceed with submitting this reading?`);
-          if (!proceed) {
-            toast.error('Submission cancelled', { id: toastId });
-            return;
-          }
-        } else {
-          toast.error(error, { id: toastId });
-          return;
-        }
+      // Create the date string in the required format
+      const currReadDate = `${year}${month}${day}`;
+      const prevReadDate = data[0]?.currentReadingDate 
+        ? format(data[0].currentReadingDate, 'yyyyMMdd')
+        : format(subMonths(now, 1), 'yyyyMMdd');
+
+      // Calculate consumption
+      const currentReading = parseFloat(formData.currentReading);
+      const previousReading = data[0]?.currentReading || 0;
+      const consumption = currentReading - previousReading;
+
+      // Reference to the specific document
+      const yearDoc = doc(db, 'meterReadings', year);
+      const monthCollection = collection(yearDoc, month);
+      const accountDoc = doc(monthCollection, userData.accountNumber);
+
+      // Create the new meter reading record
+      const meterReadingData = {
+        AccountHolder: data[0]?.AccountHolder || '',
+        AccountNo: userData.accountNumber,
+        Address: data[0]?.Address || '',
+        AmpsPhase: '',
+        AppliesToAccountType: '',
+        BasicAmount: 52,
+        BasicRebate: 0,
+        Book: '0',
+        ConsAmount: 26.6,
+        ConsRebate: 0,
+        Consumption: consumption,
+        CurrRead: currentReading,
+        CurrReadDate: currReadDate,
+        Description: data[0]?.Description || 'TARIFF 1: DOMESTIC/HUISHOUDELI',
+        ErfNo: data[0]?.ErfNo || '',
+        Factor: 1,
+        HistType: 'LVY',
+        LocalAuthority: '',
+        MeterAlpha: '',
+        MeterNumber: formData.meterNumber,
+        MeterType: formData.meterType,
+        Period: `${year}${month}`,
+        PrevRead: previousReading,
+        PrevReadDate: prevReadDate,
+        ReadType: 'CUSTOMER',
+        Reservoir: ' ',
+        Seq: '0',
+        Status: 'ACTIVE',
+        Suburb: data[0]?.Suburb || '',
+        SurCharge: 0,
+        TariffCode: formData.tariffCode,
+        TotLevied: 78.6,
+        Town: data[0]?.Town || '',
+        VATAmount: 3.99,
+        Ward: ' ',
+        accountNoIndex: userData.accountNumber,
+        month: month,
+        uploadDate: `${year}-${month}`,
+        uploadTimestamp: new Date().toISOString(),
+        year: year
+      };
+
+      // Upload photo if exists
+      let photoUrl = null;
+      if (formData.photo && userLocation) {
+        photoUrl = await uploadPhotoToStorage(formData.photo, userData.accountNumber, userLocation);
       }
 
-      // Upload photo with progress tracking
-      toast.loading('Uploading photo...', { id: toastId });
-      const photoUrl = await uploadPhotoToStorage(formData.photo, userData.accountNumber, userLocation);
-
-      // Get current date in YYYYMMDD format
-      const currentDate = format(new Date(), 'yyyyMMdd');
-      const currentPeriod = format(new Date(), 'yyyyMM');
-
-      // Query for the existing document
-      toast.loading('Fetching account details...', { id: toastId });
-      const readingsRef = collection(db, 'meterReadings');
-      const q = query(
-        readingsRef,
-        where('AccountNo', '==', userData.accountNumber),
-        orderBy('CurrReadDate', 'desc'),
-        limit(1)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        const existingData = querySnapshot.docs[0].data();
-
-        // Create new reading document with retry logic
-        let retryCount = 0;
-        const maxRetries = 3;
-        let newReadingDoc;
-
-        while (retryCount < maxRetries) {
-          try {
-            toast.loading('Saving reading...', { id: toastId });
-            newReadingDoc = await addDoc(collection(db, 'meterReadings'), {
-              // Existing fields...
-              AccountNo: userData.accountNumber,
-              AccountHolder: existingData.AccountHolder,
-              Address: existingData.Address,
-              Description: existingData.Description,
-              MeterNumber: existingData.MeterNumber,
-              MeterType: existingData.MeterType,
-              TariffCode: existingData.TariffCode,
-              ErfNo: existingData.ErfNo,
-              Book: existingData.Book,
-              Suburb: existingData.Suburb,
-              Town: existingData.Town,
-              Ward: existingData.Ward,
-              
-              // New reading details
-              PrevRead: lastReading,
-              PrevReadDate: data[0]?.currentReadingDate ? format(data[0].currentReadingDate, 'yyyyMMdd') : existingData.CurrReadDate,
-              CurrRead: currentReading,
-              CurrReadDate: currentDate,
-              Period: currentPeriod,
-              Consumption: currentReading - lastReading,
-              photoUrl: photoUrl,
-              location: userLocation,
-              ReadType: 'CUSTOMER',
-              Status: 'PENDING_REVIEW',
-              createdAt: Timestamp.now(),
-              lastUpdated: Timestamp.now(),
-              Factor: existingData.Factor || 1,
-              AmpsPhase: existingData.AmpsPhase || '',
-              MeterAlpha: existingData.MeterAlpha || '',
-              Reservoir: existingData.Reservoir || ' ',
-              Seq: existingData.Seq || '',
-              LocalAuthority: existingData.LocalAuthority || '',
-              deviceInfo: navigator.userAgent,
-              submissionMethod: 'MOBILE_APP'
-            });
-            break;
-          } catch (error) {
-            retryCount++;
-            if (retryCount === maxRetries) throw error;
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          }
-        }
-
-        if (!newReadingDoc) {
-          throw new Error('Failed to create new reading document');
-        }
-
-        // Update local state
-        const newReading: MeterReading = {
-          id: newReadingDoc.id,
-          accountNumber: userData.accountNumber,
-          meterNumber: existingData.MeterNumber,
-          meterType: existingData.MeterType,
-          tariffCode: existingData.TariffCode,
-          previousReading: lastReading,
-          currentReading: currentReading,
-          consumption: currentReading - lastReading,
-          photoUrl,
-          currentReadingDate: new Date(),
-          AccountHolder: existingData.AccountHolder,
-          Address: existingData.Address,
-          Description: existingData.Description,
-          location: userLocation
-        };
-
-        setData(prevData => {
-          const newData = [newReading, ...prevData];
-          setStats(calculateStats(newData));
-          return newData;
-        });
-
-        toast.success('Meter reading submitted successfully', { id: toastId });
-        
-        // Show consumption alert if there's a significant increase
-        const increase = ((currentReading - lastReading) / lastReading) * 100;
-        if (increase > 50) {
-          toast.warning(
-            `Your consumption has increased by ${increase.toFixed(1)}% compared to your last reading. ` +
-            'Consider checking for leaks or unusual usage patterns.',
-            { duration: 10000 }
-          );
-        }
-      } else {
-        toast.error('Could not find your meter reading record', { id: toastId });
+      if (photoUrl) {
+        meterReadingData.photoUrl = photoUrl;
       }
 
-      // Reset state
-      setShowCamera(false);
-      setUserLocation(null);
-      setFormData({
-        accountNumber: '',
-        meterNumber: '',
-        currentReading: '',
-        readingDate: format(new Date(), 'yyyy-MM-dd'),
-        meterType: '',
-        tariffCode: '',
-        photo: null
-      });
+      // Create the year document if it doesn't exist
+      await setDoc(yearDoc, {}, { merge: true });
+
+      // Set the document data
+      await setDoc(accountDoc, meterReadingData);
+
+      toast.success('Meter reading submitted successfully', { id: toastId });
       setShowSubmitForm(false);
+      
+      // Refresh the readings
+      window.location.reload();
     } catch (error: any) {
-      console.error('Error submitting reading:', error);
-      toast.error(
-        `Failed to submit meter reading: ${error.message}. ` +
-        'Please try again or contact support if the problem persists.',
-        { id: toastId }
-      );
+      console.error('Error submitting meter reading:', error);
+      toast.error(`Failed to submit meter reading: ${error.message}`, { id: toastId });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Prepare chart data
-  const chartData = useMemo(() => {
-    if (!data.length) return null;
-
-    const sortedData = [...data].sort((a, b) => 
-      new Date(a.currentReadingDate).getTime() - new Date(b.currentReadingDate).getTime()
-    );
-
-    return {
-      dates: sortedData.map(reading => format(new Date(reading.currentReadingDate), 'MMM dd')),
-      consumption: sortedData.map(reading => reading.consumption),
-      readings: sortedData.map(reading => reading.currentReading)
-    };
-  }, [data]);
-
+  // Chart options
   const chartOptions: ApexOptions = {
     chart: {
-      type: 'bar',
       height: 350,
-      stacked: false,
-      toolbar: {
-        show: true,
-        tools: {
-          download: true,
-          selection: true,
-          zoom: true,
-          zoomin: true,
-          zoomout: true,
-          pan: true,
-          reset: true
-        }
-      }
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: '55%',
-        borderRadius: 4,
-      }
+      type: 'line',
+      zoom: {
+        enabled: true
+      },
     },
     dataLabels: {
-      enabled: false
+      enabled: true
     },
-    colors: ['#0EA5E9', '#6366F1'],
+    stroke: {
+      curve: 'smooth',
+      width: 2
+    },
     grid: {
-      borderColor: '#E5E7EB',
-      strokeDashArray: 4,
-      xaxis: {
-        lines: {
-          show: true
-        }
+      row: {
+        colors: ['#f3f3f3', 'transparent'],
+        opacity: 0.5
       }
-    },
-    title: {
-      text: 'Consumption & Meter Reading Trends',
-      align: 'left',
-      style: {
-        fontSize: '16px',
-        fontWeight: '600',
-        color: '#374151'
-      }
-    },
-    legend: {
-      show: false
     },
     xaxis: {
-      type: 'category',
+      type: 'datetime',
+      categories: data
+        .filter(reading => reading.currentReadingDate)
+        .map(reading => new Date(reading.currentReadingDate).getTime()),
       labels: {
-        formatter: function(value) {
-          // Format date as 'MMM DD, YYYY'
-          return format(new Date(value), 'MMM dd, yyyy');
+        formatter: function(value: any) {
+          return format(new Date(value), 'yyyy-MM-dd');
         }
       },
       title: {
         text: 'Date'
       }
     },
-    yaxis: [
-      {
-        title: {
-          text: 'Consumption (kWh)'
-        },
-        min: 0
-      },
-      {
-        opposite: true,
-        title: {
-          text: 'Meter Reading'
-        },
-        min: 0
+    yaxis: {
+      title: {
+        text: 'Consumption'
       }
-    ],
+    },
     tooltip: {
       x: {
-        formatter: function(value) {
-          // Format date as 'MMMM DD, YYYY'
-          return format(new Date(value), 'MMMM dd, yyyy');
+        formatter: function(value: any) {
+          return format(new Date(value), 'yyyy-MM-dd');
         }
       }
-    },
-    responsive: [
-      {
-        breakpoint: 640,
-        options: {
-          chart: {
-            toolbar: {
-              show: false
-            }
-          },
-          legend: {
-            position: 'bottom',
-            offsetY: 0
-          },
-          plotOptions: {
-            bar: {
-              columnWidth: '70%'
-            }
-          },
-          xaxis: {
-            labels: {
-              rotate: -45,
-              style: {
-                fontSize: '10px'
-              }
-            }
-          }
-        }
-      }
-    ]
+    }
   };
 
-  const series = chartData ? [
+  const chartSeries = [
     {
-      name: 'Consumption',
-      type: 'bar',
-      data: chartData.consumption
-    },
-    {
-      name: 'Meter Reading',
-      type: 'bar',
-      data: chartData.readings
+      name: "Consumption",
+      data: data
+        .filter(reading => reading.consumption !== undefined && reading.consumption !== null)
+        .map(reading => ({
+          x: new Date(reading.currentReadingDate).getTime(),
+          y: reading.consumption
+        }))
+        .sort((a, b) => a.x - b.x)
     }
-  ] : [];
+  ];
+
+  // Only render chart if we have valid data
+  const renderChart = () => {
+    if (data.length === 0) {
+      return <div className="text-center p-4">No meter readings available</div>;
+    }
+
+    const validData = data.some(reading => 
+      reading.currentReadingDate && 
+      reading.consumption !== undefined && 
+      reading.consumption !== null
+    );
+
+    if (!validData) {
+      return <div className="text-center p-4">Invalid meter reading data</div>;
+    }
+
+    return (
+      <ReactApexChart
+        options={chartOptions}
+        series={chartSeries}
+        type="line"
+        height={350}
+      />
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -988,26 +855,13 @@ export default function MeterReadings() {
                 <div className="w-3 h-3 rounded-full bg-[#0EA5E9]" />
                 <span>Consumption</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#6366F1]" />
-                <span>Meter Reading</span>
-              </div>
             </div>
           </div>
           <div className="relative h-[350px] w-full overflow-hidden">
-            <ReactApexChart
-              options={chartOptions}
-              series={series}
-              type="bar"
-              height={350}
-            />
+            {renderChart()}
           </div>
           <div className="mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs sm:text-sm text-gray-500">
             <p>* Hover over the graph to see detailed values</p>
-            <div className="flex items-center gap-2">
-              <LineChart className="h-4 w-4" />
-              <span>Use the toolbar above to zoom and pan the chart</span>
-            </div>
           </div>
         </div>
       )}
