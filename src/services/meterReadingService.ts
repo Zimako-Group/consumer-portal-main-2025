@@ -1,7 +1,8 @@
-import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, writeBatch, doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export interface MeterReading {
+  uploadDate: string;
   Period: string;
   AccountNo: string;
   AccountHolder: string;
@@ -50,136 +51,191 @@ export interface UploadProgress {
   totalBatches?: number;
 }
 
-const BATCH_SIZE = 400; // Reduced from 500 to be safer
+// Helper function to validate and format date
+const validateAndFormatDate = (date: string): { year: string; month: string } => {
+  // Ensure date is in YYYY-MM format
+  const match = date.match(/^(\d{4})-(\d{2})$/);
+  if (!match) {
+    throw new Error('Invalid date format. Expected YYYY-MM');
+  }
 
-export async function uploadMeterReadings(
+  const [_, year, month] = match;
+  const yearNum = parseInt(year);
+  const monthNum = parseInt(month);
+
+  // Validate year range (2024 onwards)
+  if (yearNum < 2024) {
+    throw new Error('Year must be 2024 or later');
+  }
+
+  // Validate month range (1-12)
+  if (monthNum < 1 || monthNum > 12) {
+    throw new Error('Month must be between 1 and 12');
+  }
+
+  // Ensure month is always 2 digits
+  const formattedMonth = monthNum.toString().padStart(2, '0');
+
+  return {
+    year: year,
+    month: formattedMonth
+  };
+};
+
+// Helper function to get collection reference for a specific month
+const getMonthCollectionRef = (date: string) => {
+  const { year, month } = validateAndFormatDate(date);
+  console.log(`Creating collection reference for year: ${year}, month: ${month}`);
+  return collection(db, 'meterReadings', year, month);
+};
+
+export const uploadMeterReadings = async (
   readings: MeterReading[],
   onProgress?: (progress: UploadProgress) => void
-): Promise<void> {
+): Promise<void> => {
+  if (!readings.length) {
+    throw new Error('No readings provided');
+  }
+
+  const progress: UploadProgress = {
+    totalRecords: readings.length,
+    processedRecords: 0,
+    failedRecords: 0,
+    status: 'processing'
+  };
+
   try {
-    console.log('Starting upload process with readings:', readings.length);
-    
-    const progress: UploadProgress = {
-      totalRecords: readings.length,
-      processedRecords: 0,
-      failedRecords: 0,
-      status: 'processing',
-      phase: 'uploading'
-    };
+    const uploadDate = readings[0].uploadDate;
+    console.log(`Processing upload for date: ${uploadDate}`);
+
+    // Validate date format and get collection reference
+    const { year, month } = validateAndFormatDate(uploadDate);
+    const monthCollectionRef = collection(db, 'meterReadings', year, month);
+
+    console.log(`Uploading to collection: meterReadings/${year}/${month}`);
+
+    // Delete existing readings for this month
+    progress.phase = 'deleting';
     onProgress?.(progress);
 
-    // Process readings in batches
-    const meterReadingsRef = collection(db, 'meterReadings');
-    let currentBatch = writeBatch(db);
-    let operationCount = 0;
-    let totalProcessed = 0;
+    const existingDocs = await getDocs(monthCollectionRef);
+    console.log(`Found ${existingDocs.size} existing documents to delete`);
+
+    const deleteBatch = writeBatch(db);
+    existingDocs.forEach((doc) => {
+      deleteBatch.delete(doc.ref);
+    });
+    await deleteBatch.commit();
+    console.log('Existing documents deleted');
+
+    // Upload new readings in batches
+    const BATCH_SIZE = 500;
     const totalBatches = Math.ceil(readings.length / BATCH_SIZE);
-    
-    // Create a map to store the latest reading per account
-    const latestReadings = new Map<string, MeterReading>();
-    
-    // First, determine the latest reading for each account
-    for (const reading of readings) {
-      const existingReading = latestReadings.get(reading.AccountNo);
-      if (!existingReading || 
-          (reading.CurrReadDate > existingReading.CurrReadDate)) {
-        latestReadings.set(reading.AccountNo, reading);
-      }
+    progress.totalBatches = totalBatches;
+
+    for (let i = 0; i < readings.length; i += BATCH_SIZE) {
+      progress.phase = 'uploading';
+      progress.currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+      
+      const batch = writeBatch(db);
+      const batchReadings = readings.slice(i, i + BATCH_SIZE);
+
+      batchReadings.forEach((reading) => {
+        const docId = reading.AccountNo.toLowerCase();
+        const docRef = doc(monthCollectionRef, docId);
+
+        // Add metadata
+        const readingWithMetadata = {
+          ...reading,
+          accountNoIndex: reading.AccountNo.toLowerCase(), // for case-insensitive queries
+          uploadTimestamp: new Date().toISOString(),
+          year: year,
+          month: month
+        };
+
+        batch.set(docRef, readingWithMetadata);
+      });
+
+      await batch.commit();
+      console.log(`Batch ${progress.currentBatch}/${totalBatches} uploaded`);
+
+      progress.processedRecords += batchReadings.length;
+      onProgress?.(progress);
     }
-    
-    // Now process each unique account's latest reading
-    for (const [accountNo, reading] of latestReadings) {
-      try {
-        // Query for existing reading for this account
-        const q = query(meterReadingsRef, where('AccountNo', '==', accountNo));
-        const existingDocs = await getDocs(q);
-        
-        if (!existingDocs.empty) {
-          // Update existing document
-          const docRef = doc(db, 'meterReadings', existingDocs.docs[0].id);
-          currentBatch.update(docRef, reading);
-        } else {
-          // Create new document
-          const newDocRef = doc(meterReadingsRef);
-          currentBatch.set(newDocRef, reading);
-        }
-        
-        operationCount++;
-        totalProcessed++;
-        
-        // Update progress
-        progress.processedRecords = totalProcessed;
-        progress.currentBatch = Math.floor(totalProcessed / BATCH_SIZE) + 1;
-        progress.totalBatches = totalBatches;
-        onProgress?.(progress);
-        
-        // Commit batch if it reaches the size limit
-        if (operationCount === BATCH_SIZE) {
-          console.log(`Committing batch ${progress.currentBatch}/${totalBatches}`);
-          await currentBatch.commit();
-          currentBatch = writeBatch(db);
-          operationCount = 0;
-        }
-      } catch (error) {
-        console.error('Error processing reading:', error);
-        progress.failedRecords++;
-        onProgress?.(progress);
-      }
-    }
-    
-    // Commit any remaining operations
-    if (operationCount > 0) {
-      console.log('Committing final batch');
-      await currentBatch.commit();
-    }
-    
+
     progress.status = 'completed';
     onProgress?.(progress);
     console.log('Upload completed successfully');
-    
   } catch (error) {
-    console.error('Upload failed:', error);
-    const errorProgress: UploadProgress = {
-      totalRecords: readings.length,
-      processedRecords: 0,
-      failedRecords: readings.length,
-      status: 'error',
-      error: error.message
-    };
-    onProgress?.(errorProgress);
+    console.error('Error in uploadMeterReadings:', error);
+    progress.status = 'error';
+    progress.error = error.message;
+    onProgress?.(progress);
     throw error;
   }
-}
+};
 
-export async function getMeterReadingsForCustomer(accountNumber: string): Promise<MeterReading[]> {
+export const getMeterReadingsByDate = async (date: string): Promise<MeterReading[]> => {
   try {
-    console.log('Fetching meter readings for account:', accountNumber);
-    const meterReadingsRef = collection(db, 'meterReadings');
-    const q = query(meterReadingsRef, where('AccountNo', '==', accountNumber));
+    const { year, month } = validateAndFormatDate(date);
+    const monthCollectionRef = collection(db, 'meterReadings', year, month);
     
-    const querySnapshot = await getDocs(q);
-    console.log('Query complete. Number of docs:', querySnapshot.size);
+    console.log(`Fetching readings for ${year}-${month}`);
+    const querySnapshot = await getDocs(monthCollectionRef);
+    
+    return querySnapshot.docs.map(doc => ({
+      ...doc.data() as MeterReading
+    }));
+  } catch (error) {
+    console.error('Error fetching meter readings by date:', error);
+    throw error;
+  }
+};
 
-    const readings: MeterReading[] = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      readings.push({
-        ...data,
-        // Ensure all numeric fields are properly converted
-        PrevRead: Number(data.PrevRead) || 0,
-        CurrRead: Number(data.CurrRead) || 0,
-        Consumption: Number(data.Consumption) || 0,
-        TotLevied: Number(data.TotLevied) || 0,
-        // Ensure string fields are properly formatted
-        MeterNumber: data.MeterNumber?.toString() || '',
-        MeterType: data.MeterType?.toString() || '',
-      } as MeterReading);
-    });
-
-    console.log('Processed meter readings:', readings);
-    return readings;
+export const getMeterReadingsForCustomer = async (
+  accountNumber: string,
+  date?: string
+): Promise<MeterReading[]> => {
+  try {
+    if (date) {
+      const { year, month } = validateAndFormatDate(date);
+      const monthCollectionRef = collection(db, 'meterReadings', year, month);
+      
+      console.log(`Fetching readings for account ${accountNumber} in ${year}-${month}`);
+      const meterReadingsQuery = query(
+        monthCollectionRef,
+        where('accountNoIndex', '==', accountNumber.toLowerCase())
+      );
+      
+      const querySnapshot = await getDocs(meterReadingsQuery);
+      return querySnapshot.docs.map(doc => ({
+        ...doc.data() as MeterReading
+      }));
+    } else {
+      // If no date provided, search across all months in the current year
+      const currentYear = new Date().getFullYear().toString();
+      const yearCollection = collection(db, 'meterReadings', currentYear);
+      
+      console.log(`Fetching all readings for account ${accountNumber} in ${currentYear}`);
+      const allMonthsSnapshot = await getDocs(yearCollection);
+      
+      const readings: MeterReading[] = [];
+      for (const monthDoc of allMonthsSnapshot.docs) {
+        const monthCollectionRef = collection(yearCollection, monthDoc.id);
+        const meterReadingsQuery = query(
+          monthCollectionRef,
+          where('accountNoIndex', '==', accountNumber.toLowerCase())
+        );
+        const querySnapshot = await getDocs(meterReadingsQuery);
+        readings.push(...querySnapshot.docs.map(doc => ({
+          ...doc.data() as MeterReading
+        })));
+      }
+      
+      return readings;
+    }
   } catch (error) {
     console.error('Error fetching meter readings:', error);
-    return [];
+    throw error;
   }
-}
+};
