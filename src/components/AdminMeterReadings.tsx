@@ -61,52 +61,70 @@ export default function AdminMeterReadings() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    const fetchMeterReadings = async () => {
+    const fetchAllMeterReadings = async () => {
       setIsLoading(true);
       try {
-        const meterReadingsRef = collection(db, 'meterReadings', '2024', '09');
-        const q = query(meterReadingsRef);
+        const allReadings: MeterReading[] = [];
         
-        const querySnapshot = await getDocs(q);
-        const readings: MeterReading[] = [];
+        // Get all months from January 2024 to current month
+        const months = [];
+        const currentDate = new Date();
+        const startDate = new Date(2024, 0); // Start from January 2024
         
-        querySnapshot.forEach((doc) => {
-          const rawData = doc.data();
-          const reading: MeterReading = {
-            id: doc.id,
-            accountNumber: rawData.AccountNo,
-            accountHolder: rawData.AccountHolder,
-            address: rawData.Address,
-            meterNumber: rawData.MeterNumber,
-            meterType: rawData.MeterType,
-            tariffCode: rawData.TariffCode,
-            previousReading: rawData.PrevRead,
-            currentReading: rawData.CurrRead,
-            consumption: rawData.Consumption,
-            currentReadingDate: new Date(
-              rawData.CurrReadDate.substring(0, 4) + '-' +
-              rawData.CurrReadDate.substring(4, 6) + '-' +
-              rawData.CurrReadDate.substring(6, 8)
-            ),
-            previousReadingDate: new Date(
-              rawData.PrevReadDate.substring(0, 4) + '-' +
-              rawData.PrevReadDate.substring(4, 6) + '-' +
-              rawData.PrevReadDate.substring(6, 8)
-            ),
-            status: rawData.Status
-          };
-          readings.push(reading);
-        });
+        let currentMonth = new Date(startDate);
+        while (currentMonth <= currentDate) {
+          months.push({
+            year: currentMonth.getFullYear().toString(),
+            month: (currentMonth.getMonth() + 1).toString().padStart(2, '0')
+          });
+          currentMonth.setMonth(currentMonth.getMonth() + 1);
+        }
 
-        setData(readings);
+        // Fetch data for each month
+        for (const { year, month } of months) {
+          const meterReadingsRef = collection(db, 'meterReadings', year, month);
+          const q = query(meterReadingsRef);
+          
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            const reading: MeterReading = {
+              id: doc.id,
+              accountNumber: data.AccountNo,
+              accountHolder: data.AccountHolder,
+              address: data.Address,
+              meterNumber: data.MeterNumber,
+              meterType: data.MeterType,
+              tariffCode: data.TariffCode,
+              previousReading: data.PrevRead,
+              currentReading: data.CurrRead,
+              consumption: data.Consumption,
+              currentReadingDate: data.CurrReadDate ? new Date(
+                data.CurrReadDate.substring(0, 4) + '-' +
+                data.CurrReadDate.substring(4, 6) + '-' +
+                data.CurrReadDate.substring(6, 8)
+              ) : undefined,
+              previousReadingDate: data.PrevReadDate ? new Date(
+                data.PrevReadDate.substring(0, 4) + '-' +
+                data.PrevReadDate.substring(4, 6) + '-' +
+                data.PrevReadDate.substring(6, 8)
+              ) : undefined,
+              status: data.Status
+            };
+            allReadings.push(reading);
+          });
+        }
 
-        if (readings.length > 0) {
-          const totalConsumption = readings.reduce((sum, reading) => sum + reading.consumption, 0);
-          const avgConsumption = totalConsumption / readings.length;
-          const pendingCount = readings.filter(reading => reading.status === 'PENDING').length;
+        setData(allReadings);
+
+        // Calculate stats
+        if (allReadings.length > 0) {
+          const totalConsumption = allReadings.reduce((sum, reading) => sum + reading.consumption, 0);
+          const avgConsumption = totalConsumption / allReadings.length;
+          const pendingCount = allReadings.filter(reading => reading.status === 'PENDING').length;
 
           setStats({
-            totalReadings: readings.length,
+            totalReadings: allReadings.length,
             averageConsumption: avgConsumption,
             totalConsumption: totalConsumption,
             pendingReadings: pendingCount
@@ -120,19 +138,17 @@ export default function AdminMeterReadings() {
       }
     };
 
-    fetchMeterReadings();
+    fetchAllMeterReadings();
   }, []);
 
   const chartData = useMemo(() => {
     if (!data.length) return null;
 
-    const sortedData = [...data]
-      .sort((a, b) => {
-        const dateA = a.currentReadingDate instanceof Timestamp ? a.currentReadingDate.toDate() : a.currentReadingDate;
-        const dateB = b.currentReadingDate instanceof Timestamp ? b.currentReadingDate.toDate() : b.currentReadingDate;
-        return dateA && dateB ? dateA.getTime() - dateB.getTime() : 0;
-      })
-      .slice(-10);
+    const sortedData = [...data].sort((a, b) => {
+      const dateA = a.currentReadingDate instanceof Date ? a.currentReadingDate : new Date(a.currentReadingDate);
+      const dateB = b.currentReadingDate instanceof Date ? b.currentReadingDate : new Date(b.currentReadingDate);
+      return dateA.getTime() - dateB.getTime();
+    });
 
     return {
       options: {
@@ -164,15 +180,18 @@ export default function AdminMeterReadings() {
         },
         colors: ['#2563eb'],
         xaxis: {
-          categories: sortedData.map(reading => 
-            reading.currentReadingDate instanceof Date 
-              ? format(reading.currentReadingDate, 'MMM dd')
-              : format(reading.currentReadingDate.toDate(), 'MMM dd')
-          ),
+          categories: sortedData.map(reading => {
+            const date = reading.currentReadingDate instanceof Date 
+              ? reading.currentReadingDate 
+              : new Date(reading.currentReadingDate);
+            return format(date, 'MMM yyyy');
+          }),
           labels: {
             style: {
               colors: isDarkMode ? '#fff' : '#000'
-            }
+            },
+            rotate: -45,
+            rotateAlways: false
           },
           axisBorder: {
             show: false
@@ -207,6 +226,9 @@ export default function AdminMeterReadings() {
           theme: isDarkMode ? 'dark' : 'light',
           y: {
             formatter: (value: number) => value.toFixed(2)
+          },
+          x: {
+            formatter: (value: string) => value
           }
         }
       },
