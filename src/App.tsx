@@ -46,15 +46,22 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
+          console.log('User authenticated:', user.uid);
           // Fetch user data from Firestore
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
+            console.log('User data from Firestore:', userData);
+            
+            // Ensure account number is properly formatted
+            const formattedAccountNumber = userData.accountNumber ? userData.accountNumber.trim() : '';
+            console.log('Formatted account number:', formattedAccountNumber);
+            
             setCurrentUser({
               email: userData.email,
-              name: userData.name || userData.fullName,
-              role: userData.role,
-              accountNumber: userData.accountNumber,
+              name: userData.fullName || userData.name,
+              role: userData.role || 'user',
+              accountNumber: formattedAccountNumber,
               department: userData.department,
             });
             setIsLoggedIn(true);
@@ -216,18 +223,12 @@ function App() {
                         userName={currentUser.name}
                         department={currentUser.department}
                       />
-                    ) : currentUser?.role === 'customer' ? (
-                      <CustomerDashboard
-                        onLogout={handleLogout}
-                        userEmail={currentUser.email}
-                        userName={currentUser.name}
-                        accountNumber={currentUser.accountNumber || ''}
-                      />
                     ) : (
                       <Dashboard
                         onLogout={handleLogout}
-                        userEmail={currentUser?.email || ''}
-                        userName={currentUser?.name || ''}
+                        userEmail={currentUser.email}
+                        userName={currentUser.name}
+                        accountNumber={currentUser.accountNumber}
                       />
                     )
                   }

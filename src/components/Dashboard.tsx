@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FileText, CreditCard, Activity, MessageSquare, Menu, HandshakeIcon, HelpCircle, UserPlus } from 'lucide-react';
 import { getGreeting, getSASTHour } from '../utils/timeUtils';
 import { db } from '../firebaseConfig';
-import { doc, getDoc, updateDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, setDoc } from 'firebase/firestore';
 import { format, lastDayOfMonth } from 'date-fns';
 import Sidebar from './Sidebar';
 import Settings from './Settings';
@@ -31,8 +31,14 @@ interface CustomerData {
   accountStatus: string;
   accountType: string;
   outstandingTotalBalance: number;
+  outstandingBalanceCapital: number;
+  outstandingBalanceInterest: number;
   lastPaymentAmount: number;
   lastPaymentDate: string;
+  lastUpdated: string;
+  mailingInstruction: string;
+  occupantOwner: string;
+  ownerCategory: string;
   dueDate: string;
   communicationPreferences?: CommunicationPreferences;
 }
@@ -50,6 +56,8 @@ interface CommunicationPreferences {
 }
 
 export default function Dashboard({ onLogout, userEmail, userName, accountNumber }: DashboardProps) {
+  console.log('Dashboard rendered with props:', { userEmail, userName, accountNumber });
+
   const [greeting, setGreeting] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
@@ -65,6 +73,10 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   const [showIndigentModal, setShowIndigentModal] = useState(false);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+
+  useEffect(() => {
+    console.log('Dashboard mounted with account number:', accountNumber);
+  }, [accountNumber]);
 
   useEffect(() => {
     const updateGreeting = () => {
@@ -97,26 +109,90 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   useEffect(() => {
     const fetchCustomerData = async () => {
       try {
-        console.log('Fetching data for account:', accountNumber);
-        const customerDoc = await getDoc(doc(db, 'customers', accountNumber));
+        if (!accountNumber) {
+          console.error('Account number is undefined or empty');
+          setLoading(false);
+          return;
+        }
+
+        // Ensure the account number is properly formatted (remove any spaces or special characters)
+        const formattedAccountNumber = accountNumber.trim();
+        console.log('Fetching data for account:', formattedAccountNumber);
+
+        // Get the customer document reference
+        const customerRef = doc(db, 'customers', formattedAccountNumber);
+        console.log('Attempting to fetch document at path:', customerRef.path);
+
+        // Fetch the document
+        const customerDoc = await getDoc(customerRef);
+        console.log('Document exists:', customerDoc.exists());
+
         if (customerDoc.exists()) {
-          const data = customerDoc.data() as CustomerData;
-          console.log('Customer data fetched:', data);
-          setCustomerData(data);
-          // Initialize preferences from Firebase data
-          if (data.communicationPreferences) {
-            setPreferences(data.communicationPreferences);
+          const data = customerDoc.data();
+          console.log('Raw Firestore data:', data);
+
+          // Convert the data to our CustomerData type
+          const customerData: CustomerData = {
+            accountNumber: formattedAccountNumber,
+            accountHolderName: data.accountHolderName || userName,
+            accountStatus: data.accountStatus || 'Active',
+            accountType: data.accountType || 'Standard',
+            outstandingTotalBalance: typeof data.outstandingTotalBalance === 'string' 
+              ? parseFloat(data.outstandingTotalBalance) 
+              : Number(data.outstandingTotalBalance) || 0,
+            outstandingBalanceCapital: typeof data.outstandingBalanceCapital === 'string'
+              ? parseFloat(data.outstandingBalanceCapital)
+              : Number(data.outstandingBalanceCapital) || 0,
+            outstandingBalanceInterest: typeof data.outstandingBalanceInterest === 'string'
+              ? parseFloat(data.outstandingBalanceInterest)
+              : Number(data.outstandingBalanceInterest) || 0,
+            lastPaymentAmount: typeof data.lastPaymentAmount === 'string'
+              ? parseFloat(data.lastPaymentAmount)
+              : Number(data.lastPaymentAmount) || 0,
+            lastPaymentDate: data.lastPaymentDate || '',
+            lastUpdated: data.lastUpdated || '',
+            mailingInstruction: data.mailingInstruction || '',
+            occupantOwner: data.occupantOwner || '',
+            ownerCategory: data.ownerCategory || '',
+            dueDate: currentDueDate,
+            communicationPreferences: data.communicationPreferences || {
+              sms: { enabled: false, value: '' },
+              whatsapp: { enabled: false, value: '' },
+              email: { enabled: true, value: userEmail }
+            }
+          };
+
+          console.log('Processed customer data:', customerData);
+          setCustomerData(customerData);
+
+          if (customerData.communicationPreferences) {
+            setPreferences(customerData.communicationPreferences);
           }
+        } else {
+          console.error(`No customer document found at path: ${customerRef.path}`);
+          setCustomerData(null);
         }
       } catch (error) {
         console.error('Error fetching customer data:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack
+          });
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCustomerData();
-  }, [accountNumber]);
+    if (accountNumber && accountNumber.trim()) {
+      console.log('Starting customer data fetch for account:', accountNumber);
+      fetchCustomerData();
+    } else {
+      console.log('No account number provided, skipping data fetch');
+      setLoading(false);
+    }
+  }, [accountNumber, userName, userEmail, currentDueDate]);
 
   useEffect(() => {
     const fetchRecentActivities = async () => {
@@ -132,6 +208,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
             date: format(doc.data().date.toDate(), 'dd MMM yyyy')
           });
         });
+        console.log('Fetched recent activities:', activities);
         setRecentActivities(activities);
       } catch (error) {
         console.error('Error fetching recent activities:', error);
@@ -147,6 +224,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
     const action = searchParams.get('action');
     
     if (tab === 'payments' && action === 'arrangement') {
+      console.log('Redirecting to payments tab with arrangement action');
       setCurrentView('payments');
       // Add a small delay to ensure the Payment component is mounted
       setTimeout(() => {
@@ -156,6 +234,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
         }
       }, 100);
     } else if (tab === 'query' && action === 'billing') {
+      console.log('Redirecting to query tab with billing action');
       setCurrentView('query');
       // Add a small delay to ensure the QueryForm component is mounted
       setTimeout(() => {
@@ -169,6 +248,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
 
   const handlePreferencesSave = async (newPreferences: CommunicationPreferences) => {
     try {
+      console.log('Saving new preferences:', newPreferences);
       await updateDoc(doc(db, 'customers', accountNumber), {
         communicationPreferences: newPreferences
       });
@@ -187,6 +267,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
         date: today
       };
 
+      console.log('Adding new activity:', newActivity);
       setRecentActivities(prev => [newActivity, ...prev]);
       
       return Promise.resolve();
@@ -197,16 +278,19 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   };
 
   const navigateToReadings = () => {
+    console.log('Navigating to readings tab');
     trackUserActivity(accountNumber, 'navigation', 'Dashboard', { destination: 'readings' });
     setCurrentView('readings');
   };
 
   const navigateToQuery = () => {
+    console.log('Navigating to query tab');
     trackUserActivity(accountNumber, 'navigation', 'Dashboard', { destination: 'query' });
     setCurrentView('query');
   };
 
   const navigateToPayment = () => {
+    console.log('Navigating to payment tab');
     trackUserActivity(accountNumber, 'navigation', 'Dashboard', { destination: 'payment' });
     setCurrentView('payment');
   };
@@ -239,10 +323,10 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
     { label: 'Last Payment', value: 'Loading...' },
     { label: 'Last Payment Date', value: 'Loading...' }
   ] : customerData ? [
-    { label: 'Current Balance', value: `R ${customerData.outstandingTotalBalance.toLocaleString()}` },
+    { label: 'Current Balance', value: `R ${Number(customerData.outstandingTotalBalance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` },
     { label: 'Due Date', value: currentDueDate },
-    { label: 'Last Payment', value: `R ${customerData.lastPaymentAmount.toLocaleString()}` },
-    { label: 'Last Payment Date', value: formatFirestoreDate(customerData.lastPaymentDate.toString()) }
+    { label: 'Last Payment', value: `R ${Number(customerData.lastPaymentAmount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` },
+    { label: 'Last Payment Date', value: customerData.lastPaymentDate ? format(new Date(customerData.lastPaymentDate), 'dd MMM yyyy') : 'N/A' }
   ] : [
     { label: 'Current Balance', value: 'No data' },
     { label: 'Due Date', value: currentDueDate },
@@ -251,6 +335,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   ];
 
   const renderContent = () => {
+    console.log('Rendering content for view:', currentView);
     return (
       <AnimatePresence mode="wait">
         {currentView === 'settings' ? (
