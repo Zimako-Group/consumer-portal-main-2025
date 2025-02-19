@@ -711,8 +711,50 @@ export default function MeterReadings() {
       toast.success('Meter reading submitted successfully', { id: toastId });
       setShowSubmitForm(false);
       
-      // Refresh the readings
-      window.location.reload();
+      // Refresh the data without page reload
+      const refreshData = async () => {
+        try {
+          setIsLoading(true);
+          if (!userData?.accountNumber) return;
+
+          const yearDoc = doc(db, 'meterReadings', year);
+          const monthCollection = collection(yearDoc, month);
+          const accountDoc = doc(monthCollection, userData.accountNumber);
+          
+          const docSnapshot = await getDoc(accountDoc);
+          
+          if (docSnapshot.exists()) {
+            const newReading = docSnapshot.data();
+            // Add the new reading to the existing data
+            setData(prevData => {
+              const newData = [{
+                id: docSnapshot.id,
+                accountNumber: newReading.AccountNo,
+                meterNumber: newReading.MeterNumber,
+                meterType: newReading.MeterType,
+                tariffCode: newReading.TariffCode,
+                previousReading: newReading.PrevRead,
+                currentReading: newReading.CurrRead,
+                consumption: newReading.Consumption,
+                photoUrl: newReading.photoUrl,
+                currentReadingDate: new Date(newReading.CurrReadDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')),
+                AccountHolder: newReading.AccountHolder,
+                Address: newReading.Address,
+                Description: newReading.Description,
+                location: newReading.location
+              }, ...prevData];
+              return newData;
+            });
+          }
+        } catch (error) {
+          console.error('Error refreshing data:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      await refreshData();
+      
     } catch (error: any) {
       console.error('Error submitting meter reading:', error);
       toast.error(`Failed to submit meter reading: ${error.message}`, { id: toastId });
