@@ -12,7 +12,7 @@ import {
 import { Search, Loader2, TrendingUp, TrendingDown, AlertTriangle, Plus, Download, LineChart } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
@@ -185,27 +185,35 @@ export default function MeterReadings() {
         }
 
         console.log('Fetching meter readings for account:', userData.accountNumber);
-        const readingsRef = collection(db, 'meterReadings');
-        const q = query(
-          readingsRef,
-          where('AccountNo', '==', userData.accountNumber),
-          orderBy('CurrReadDate', 'desc')
-        );
         
-        const querySnapshot = await getDocs(q);
+        // Create a reference to the specific document using the nested path
+        const yearDoc = doc(db, 'meterReadings', '2024');
+        const monthCollection = collection(yearDoc, '09');
+        const accountDoc = doc(monthCollection, userData.accountNumber);
+        
+        // Get the document
+        const docSnapshot = await getDoc(accountDoc);
+        
+        console.log('Document exists:', docSnapshot.exists());
+        
         const readings: MeterReading[] = [];
         
-        for (const doc of querySnapshot.docs) {
-          const data = doc.data();
-          // Parse the date string from YYYYMMDD format
-          const dateStr = data.CurrReadDate;
-          const year = dateStr.substring(0, 4);
-          const month = dateStr.substring(4, 6);
-          const day = dateStr.substring(6, 8);
-          const formattedDate = new Date(`${year}-${month}-${day}`);
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          console.log('Document data:', data);
 
+          // Parse the date string from YYYYMMDD format
+          const currDateStr = data.CurrReadDate || '20240915';
+          const prevDateStr = data.PrevReadDate || '20240815';
+          
+          const currDate = new Date(
+            parseInt(currDateStr.substring(0, 4)),
+            parseInt(currDateStr.substring(4, 6)) - 1,
+            parseInt(currDateStr.substring(6, 8))
+          );
+          
           readings.push({
-            id: doc.id,
+            id: docSnapshot.id,
             accountNumber: data.AccountNo,
             meterNumber: data.MeterNumber,
             meterType: data.MeterType,
@@ -213,20 +221,33 @@ export default function MeterReadings() {
             previousReading: data.PrevRead,
             currentReading: data.CurrRead,
             consumption: data.Consumption,
-            photoUrl: data.photoUrl,
-            currentReadingDate: formattedDate,
+            photoUrl: null,
+            currentReadingDate: currDate,
             AccountHolder: data.AccountHolder,
             Address: data.Address,
             Description: data.Description,
-            location: data.location
+            location: null
           });
         }
         
-        setData(readings);
-        setStats(calculateStats(readings));
-      } catch (error) {
-        console.error('Error fetching meter readings:', error);
-        toast.error('Failed to load meter readings');
+        console.log('Found readings:', readings.length);
+        
+        if (readings.length === 0) {
+          console.log('No readings found for account:', userData.accountNumber);
+          toast.error('No meter readings found for your account');
+        } else {
+          setData(readings);
+          setStats(calculateStats(readings));
+          console.log('Successfully loaded readings with data:', readings);
+        }
+      } catch (error: any) {
+        console.error('Error fetching meter readings:', {
+          error,
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        toast.error(`Failed to load meter readings: ${error.message}`);
       } finally {
         setIsLoading(false);
       }
