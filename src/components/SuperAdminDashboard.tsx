@@ -15,6 +15,7 @@ import StatsCard from './StatsCard';
 import FeatureCard from './FeatureCard';
 import ZimakoAIChatBot from './ZimakoAIChatBot';
 import ActiveUsersCard from './analytics/ActiveUsersCard';
+import AdminMeterReadings from './AdminMeterReadings';
 import { useTheme } from '../contexts/ThemeContext';
 import jellyfishBg from '../assets/jellyfish-bg.svg';
 import '../styles/dashboard.css';
@@ -28,7 +29,7 @@ const getGreeting = () => {
 
 export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void }) {
   const { isDarkMode } = useTheme();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const statsData = [
@@ -121,6 +122,10 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               <ViewStatements />
             ) : currentView === 'payment-reminder' ? (
               <SuperPaymentReminder />
+            ) : currentView === 'meter-readings' ? (
+              <div className="p-8">
+                <AdminMeterReadings />
+              </div>
             ) : (
               // Dashboard View with new greeting and stats cards
               <div className="flex flex-col items-center justify-center min-h-[80vh] p-8">

@@ -29,8 +29,8 @@ import { useTheme } from '../contexts/ThemeContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
-  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder') => void;
-  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder';
+  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings') => void;
+  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings';
 }
 
 interface NavItem {
@@ -89,7 +89,8 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, c
     { 
       name: 'Meter Readings', 
       icon: <Activity className="w-5 h-5" />, 
-      href: '/meter-readings' 
+      href: '#',
+      action: () => onViewChange('meter-readings')
     },
     {
       name: 'Users',
