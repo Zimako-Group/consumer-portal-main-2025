@@ -99,41 +99,68 @@ export default function MeterReadings() {
       try {
         console.log('Fetching meter number for account:', userData.accountNumber);
         const readingsRef = collection(db, 'meterReadings');
+        
+        // Log the query parameters
+        console.log('Query parameters:', {
+          accountNumber: userData.accountNumber
+        });
+
+        // Create a simple query to get the document
         const q = query(
           readingsRef,
-          where('AccountNo', '==', userData.accountNumber),
-          limit(1)
+          where('AccountNo', '==', userData.accountNumber)
         );
         
         const querySnapshot = await getDocs(q);
-        console.log('Query results:', querySnapshot.docs.map(doc => doc.data()));
+        
+        // Log the raw query results
+        console.log('Query snapshot size:', querySnapshot.size);
+        console.log('Query results:', querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })));
         
         if (!querySnapshot.empty) {
           const latestReading = querySnapshot.docs[0].data();
           console.log('Latest reading data:', latestReading);
+          
+          // Log all the relevant fields we're trying to access
+          console.log('Field check:', {
+            hasMeterNumber: !!latestReading.MeterNumber,
+            meterNumber: latestReading.MeterNumber,
+            meterType: latestReading.MeterType,
+            tariffCode: latestReading.TariffCode
+          });
           
           if (latestReading.MeterNumber) {
             setCustomerMeterNumber(latestReading.MeterNumber);
             setFormData(prev => ({
               ...prev,
               meterNumber: latestReading.MeterNumber,
-              meterType: latestReading.MeterType || '',
+              meterType: latestReading.MeterType || 'PREPAID WATER',
               tariffCode: latestReading.TariffCode || ''
             }));
-            console.log('Updated meter details:', {
+            console.log('Successfully updated meter details:', {
               meterNumber: latestReading.MeterNumber,
               meterType: latestReading.MeterType,
               tariffCode: latestReading.TariffCode
             });
           } else {
-            console.log('No meter number found in the reading data');
+            console.warn('No meter number found in the reading data:', latestReading);
+            toast.error('No meter number found in the reading data');
           }
         } else {
-          console.log('No readings found for this account');
+          console.warn('No readings found for account:', userData.accountNumber);
+          toast.error('No readings found for your account');
         }
-      } catch (error) {
-        console.error('Error fetching meter number:', error);
-        toast.error('Failed to fetch meter number');
+      } catch (error: any) {
+        console.error('Error fetching meter number:', {
+          error,
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        toast.error(`Failed to fetch meter number: ${error.message}`);
       }
     };
 
@@ -155,7 +182,8 @@ export default function MeterReadings() {
         const readingsRef = collection(db, 'meterReadings');
         const q = query(
           readingsRef,
-          where('AccountNo', '==', userData.accountNumber)
+          where('AccountNo', '==', userData.accountNumber),
+          orderBy('CurrReadDate', 'desc')
         );
         
         const querySnapshot = await getDocs(q);
@@ -994,7 +1022,7 @@ export default function MeterReadings() {
                             aria-hidden="true"
                           >
                             <path
-                              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 015.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
                               strokeWidth={2}
                               strokeLinecap="round"
                               strokeLinejoin="round"
