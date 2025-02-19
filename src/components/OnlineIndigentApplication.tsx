@@ -35,7 +35,39 @@ interface EmploymentDetails {
   address: string;
   employerContact: string;
   salary: string;
-  employmentStatus: 'Permanent' | 'Seasonal' | 'Unemployed';
+  employmentStatus: 'Permanent' | 'Seasonal' | 'Unemployed' | 'SASSA';
+  sassaSrdNumber?: string;
+}
+
+interface FormData {
+  // Personal Information
+  fullName: string;
+  maidenName: string;
+  idNumber: string;
+  dateOfBirth: string;
+  taxpayerNumber: string;
+  maritalStatus: string;
+  spouseFullName: string;
+  spouseIdNumber: string;
+  spouseTaxpayerNumber: string;
+  address: string;
+
+  // Household Details
+  numberOfDependants: string;
+  occupants: Occupant[];
+
+  // Income & Employment
+  employmentDetails: EmploymentDetails;
+
+  // Supporting Documents
+  idDocument: File | null;
+  proofOfResidence: File | null;
+  bankStatements: File | null;
+
+  // Application Status
+  lastSaved: string | null;
+  status: 'draft' | 'submitted';
+  currentStep: number;
 }
 
 const APPLICATION_STEPS: ApplicationStep[] = [
@@ -83,8 +115,9 @@ const RELATIONSHIP_OPTIONS = [
 ];
 
 const EMPLOYMENT_STATUS_OPTIONS = [
-  { value: 'Permanent', label: 'Permanent' },
-  { value: 'Seasonal', label: 'Seasonal' },
+  { value: 'Permanent', label: 'Permanent Employment' },
+  { value: 'Seasonal', label: 'Seasonal Employment' },
+  { value: 'SASSA', label: 'SASSA Beneficiary' },
   { value: 'Unemployed', label: 'Unemployed' }
 ];
 
@@ -93,7 +126,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
   const [currentStep, setCurrentStep] = useState(1);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
   const [shouldSave, setShouldSave] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     // Personal Information
     fullName: '',
     maidenName: '',
@@ -105,11 +138,11 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
     spouseIdNumber: '',
     spouseTaxpayerNumber: '',
     address: '',
-    
+
     // Household Details
     numberOfDependants: '0',
-    occupants: [] as Occupant[],
-    
+    occupants: [],
+
     // Income & Employment
     employmentDetails: {
       companyName: '',
@@ -118,15 +151,15 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
       salary: '',
       employmentStatus: 'Unemployed' as const
     },
-    
+
     // Supporting Documents
-    idDocument: null as File | null,
-    proofOfResidence: null as File | null,
-    bankStatements: null as File | null,
+    idDocument: null,
+    proofOfResidence: null,
+    bankStatements: null,
 
     // Application Status
-    lastSaved: null as string | null,
-    status: 'draft' as 'draft' | 'submitted',
+    lastSaved: null,
+    status: 'draft',
     currentStep: 1
   });
 
@@ -171,7 +204,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
       try {
         setAutoSaveStatus('saving');
         const applicationRef = doc(db, 'indigentApplications', currentUser.email);
-        
+
         // Create a save-safe version of the form data (excluding File objects)
         const saveData = {
           ...formData,
@@ -184,7 +217,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
 
         await setDoc(applicationRef, saveData, { merge: true });
         setAutoSaveStatus('saved');
-        
+
         // Update the form data with the save time
         setFormData(prev => ({
           ...prev,
@@ -212,7 +245,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
+
     // Handle nested fields (e.g., employmentDetails.companyName)
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
@@ -229,7 +262,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         [name]: value
       }));
     }
-    
+
     // Trigger auto-save after user input
     setShouldSave(true);
   };
@@ -270,7 +303,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         }
       })
     }));
-    
+
     // Trigger auto-save after dependants change
     setShouldSave(true);
   };
@@ -280,7 +313,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
       ...prev,
       occupants: prev.occupants.map((occupant, i) => {
         if (i !== index) return occupant;
-        
+
         if (field.startsWith('employment.')) {
           const employmentField = field.split('.')[1] as keyof typeof occupant.employment;
           return {
@@ -291,14 +324,14 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
             }
           };
         }
-        
+
         return {
           ...occupant,
           [field]: value
         };
       })
     }));
-    
+
     // Trigger auto-save after occupant change
     setShouldSave(true);
   };
@@ -306,7 +339,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
   const handleOccupantIdNumberChange = (index: number, value: string) => {
     // Only allow numbers
     const numbersOnly = value.replace(/[^0-9]/g, '');
-    
+
     if (numbersOnly.length <= 13) {
       handleOccupantChange(index, 'idNumber', numbersOnly);
     }
@@ -378,13 +411,17 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
           return false;
         }
         if (formData.employmentDetails.employmentStatus !== 'Unemployed') {
-          if (!formData.employmentDetails.companyName || 
-              !formData.employmentDetails.address || 
-              !formData.employmentDetails.employerContact || 
-              !formData.employmentDetails.salary) {
+          if (!formData.employmentDetails.companyName ||
+            !formData.employmentDetails.address ||
+            !formData.employmentDetails.employerContact ||
+            !formData.employmentDetails.salary) {
             toast.error('Please fill in all employment details');
             return false;
           }
+        }
+        if (formData.employmentDetails.employmentStatus === 'SASSA' && !formData.employmentDetails.sassaSrdNumber) {
+          toast.error('Please enter your SASSA SRD number');
+          return false;
         }
         break;
       case 4:
@@ -539,7 +576,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
             {formData.maritalStatus === 'married' && (
               <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Spouse Information</h3>
-                
+
                 {/* Spouse Full Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -717,7 +754,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
                         />
                       </div>
                     </div>
-                    
+
                     {/* Employment Details Section */}
                     <div className="mt-6">
                       <h5 className="font-medium text-gray-900 dark:text-white mb-4">
@@ -841,7 +878,7 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
             </div>
 
             <AnimatePresence mode="wait">
-              {(formData.employmentDetails.employmentStatus === 'Permanent' || 
+              {(formData.employmentDetails.employmentStatus === 'Permanent' ||
                 formData.employmentDetails.employmentStatus === 'Seasonal') && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -927,6 +964,31 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
                         required
                       />
                     </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {formData.employmentDetails.employmentStatus === 'SASSA' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6 mt-8 max-w-md mx-auto"
+                >
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      SASSA SRD Number *
+                    </label>
+                    <input
+                      type="text"
+                      name="employmentDetails.sassaSrdNumber"
+                      value={formData.employmentDetails.sassaSrdNumber || ''}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                      placeholder="Enter your SASSA SRD number"
+                      required
+                    />
                   </div>
                 </motion.div>
               )}
