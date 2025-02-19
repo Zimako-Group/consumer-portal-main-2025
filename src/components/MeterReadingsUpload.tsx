@@ -188,7 +188,11 @@ const MeterReadingsUpload: React.FC = () => {
 
       console.log('Upload completed successfully');
       setUploading(false);
-      setSelectedMonth(null); // Reset month after successful upload
+      // Don't reset the month immediately so the success message can display
+      setTimeout(() => {
+        setSelectedMonth(null);
+        setProgress(null);
+      }, 3000); // Reset after 3 seconds
     } catch (err) {
       console.error('Error in handleFileUpload:', err);
       setError(err.message || 'An error occurred while uploading meter readings');
@@ -294,9 +298,9 @@ const MeterReadingsUpload: React.FC = () => {
           </div>
         )}
 
-        {progress?.status === 'completed' && (
+        {progress?.status === 'completed' && selectedMonth && (
           <div className="mt-4 p-4 text-green-700 bg-green-100 dark:text-green-200 dark:bg-green-900/50 rounded-md">
-            Successfully uploaded {progress.processedRecords} meter readings for {selectedMonth?.label}
+            Successfully uploaded {progress.processedRecords} meter readings for {selectedMonth.label}
           </div>
         )}
       </div>
