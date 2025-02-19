@@ -160,11 +160,9 @@ export default function MeterReadings() {
             });
           } else {
             console.warn('No meter number found in the reading data:', latestReading);
-            toast.error('No meter number found in the reading data');
           }
         } else {
           console.warn('No readings found for account:', userData.accountNumber);
-          toast.error('No readings found for your account');
         }
       } catch (error: any) {
         console.error('Error fetching meter number:', {
@@ -173,7 +171,6 @@ export default function MeterReadings() {
           code: error.code,
           stack: error.stack
         });
-        toast.error(`Failed to fetch meter number: ${error.message}`);
       }
     };
 
@@ -241,7 +238,6 @@ export default function MeterReadings() {
         
         if (readings.length === 0) {
           console.log('No readings found for account:', userData.accountNumber);
-          toast.error('No meter readings found for your account');
         } else {
           setData(readings);
           setStats(calculateStats(readings));
@@ -254,7 +250,6 @@ export default function MeterReadings() {
           code: error.code,
           stack: error.stack
         });
-        toast.error(`Failed to load meter readings: ${error.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -828,16 +823,13 @@ export default function MeterReadings() {
         show: true,
         tools: {
           download: true,
-          selection: false,
-          zoom: false,
-          zoomin: false,
-          zoomout: false,
-          pan: false,
-          reset: false
+          selection: true,
+          zoom: true,
+          zoomin: true,
+          zoomout: true,
+          pan: true,
+          reset: true
         }
-      },
-      zoom: {
-        enabled: false
       }
     },
     plotOptions: {
@@ -873,15 +865,15 @@ export default function MeterReadings() {
       show: false
     },
     xaxis: {
-      categories: chartData?.dates || [],
+      type: 'category',
+      labels: {
+        formatter: function(value) {
+          // Format date as 'MMM DD, YYYY'
+          return format(new Date(value), 'MMM dd, yyyy');
+        }
+      },
       title: {
         text: 'Date'
-      },
-      labels: {
-        rotate: -45,
-        style: {
-          fontSize: '12px'
-        }
       }
     },
     yaxis: [
@@ -889,26 +881,21 @@ export default function MeterReadings() {
         title: {
           text: 'Consumption (kWh)'
         },
-        labels: {
-          formatter: (value) => `${value.toFixed(1)}`
-        }
+        min: 0
       },
       {
         opposite: true,
         title: {
           text: 'Meter Reading'
         },
-        labels: {
-          formatter: (value) => `${value.toFixed(0)}`
-        }
+        min: 0
       }
     ],
     tooltip: {
-      shared: true,
-      intersect: false,
-      y: {
-        formatter: (value, { seriesIndex }) => {
-          return `${value.toFixed(seriesIndex === 0 ? 1 : 0)} kWh`;
+      x: {
+        formatter: function(value) {
+          // Format date as 'MMMM DD, YYYY'
+          return format(new Date(value), 'MMMM dd, yyyy');
         }
       }
     },
@@ -1270,7 +1257,7 @@ export default function MeterReadings() {
           onClick={() => setSelectedImage(null)}
         >
           <div 
-            className="relative max-w-4xl w-full bg-white rounded-lg shadow-xl"
+            className="relative max-w-4xl w-full bg-white rounded-lg"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-2">
