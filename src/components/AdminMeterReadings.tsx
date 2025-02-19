@@ -60,7 +60,69 @@ export default function AdminMeterReadings() {
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('month');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Prepare consumption chart data
+  useEffect(() => {
+    const fetchMeterReadings = async () => {
+      setIsLoading(true);
+      try {
+        const meterReadingsRef = collection(db, 'meterReadings', '2024', '09');
+        const q = query(meterReadingsRef);
+        
+        const querySnapshot = await getDocs(q);
+        const readings: MeterReading[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const rawData = doc.data();
+          const reading: MeterReading = {
+            id: doc.id,
+            accountNumber: rawData.AccountNo,
+            accountHolder: rawData.AccountHolder,
+            address: rawData.Address,
+            meterNumber: rawData.MeterNumber,
+            meterType: rawData.MeterType,
+            tariffCode: rawData.TariffCode,
+            previousReading: rawData.PrevRead,
+            currentReading: rawData.CurrRead,
+            consumption: rawData.Consumption,
+            currentReadingDate: new Date(
+              rawData.CurrReadDate.substring(0, 4) + '-' +
+              rawData.CurrReadDate.substring(4, 6) + '-' +
+              rawData.CurrReadDate.substring(6, 8)
+            ),
+            previousReadingDate: new Date(
+              rawData.PrevReadDate.substring(0, 4) + '-' +
+              rawData.PrevReadDate.substring(4, 6) + '-' +
+              rawData.PrevReadDate.substring(6, 8)
+            ),
+            status: rawData.Status
+          };
+          readings.push(reading);
+        });
+
+        setData(readings);
+
+        if (readings.length > 0) {
+          const totalConsumption = readings.reduce((sum, reading) => sum + reading.consumption, 0);
+          const avgConsumption = totalConsumption / readings.length;
+          const pendingCount = readings.filter(reading => reading.status === 'PENDING').length;
+
+          setStats({
+            totalReadings: readings.length,
+            averageConsumption: avgConsumption,
+            totalConsumption: totalConsumption,
+            pendingReadings: pendingCount
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching meter readings:', error);
+        toast.error('Failed to fetch meter readings');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMeterReadings();
+  }, []);
+
   const chartData = useMemo(() => {
     if (!data.length) return null;
 
