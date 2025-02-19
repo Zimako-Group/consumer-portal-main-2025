@@ -7,6 +7,7 @@ import {
   getFilteredRowModel,
   useReactTable,
   SortingState,
+  getPaginationRowModel,
 } from '@tanstack/react-table';
 import { Search, Loader2, TrendingUp, TrendingDown, AlertTriangle, Plus, Download, LineChart } from 'lucide-react';
 import { format } from 'date-fns';
@@ -17,6 +18,7 @@ import { db, storage } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import ReactApexChart from 'react-apexcharts';
 import { ApexOptions } from 'apexcharts';
+import imageCompression from 'browser-image-compression';
 
 interface MeterReading {
   id?: string;
@@ -78,6 +80,10 @@ export default function MeterReadings() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const videoRef = React.createRef<HTMLVideoElement>();
   const canvasRef = React.createRef<HTMLCanvasElement>();
+
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(5);
 
   // Reset form data when modal opens
   useEffect(() => {
@@ -416,12 +422,17 @@ export default function MeterReadings() {
     state: {
       sorting,
       globalFilter,
+      pagination: {
+        pageIndex: currentPage,
+        pageSize,
+      },
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 
   const getTrendColor = (trend: 'up' | 'down' | 'stable') => {
@@ -472,16 +483,45 @@ export default function MeterReadings() {
     }
   };
 
-  const validateReading = (currentReading: number, lastReading: number) => {
+  const validateReading = (currentReading: number, lastReading: number, meterType: string) => {
     // Basic validation
+    if (isNaN(currentReading)) {
+      return 'Please enter a valid number for the current reading';
+    }
+
     if (currentReading <= lastReading) {
       return 'Current reading must be greater than the last reading';
     }
 
-    // Suspicious increase validation (e.g., more than 300% increase)
+    // Suspicious increase validation based on meter type
     const increase = ((currentReading - lastReading) / lastReading) * 100;
-    if (increase > 300) {
-      return 'Warning: Unusually high consumption detected. Please verify the reading.';
+    const thresholds = {
+      'PREPAID WATER': 400,
+      'PREPAID ELECTRIC': 300,
+      'CONVENTIONAL WATER': 400,
+      'CONVENTIONAL ELECTRIC': 300,
+      'default': 300
+    };
+
+    const threshold = thresholds[meterType as keyof typeof thresholds] || thresholds.default;
+    
+    if (increase > threshold) {
+      return `Warning: Unusually high consumption detected (${increase.toFixed(1)}% increase). Please verify the reading.`;
+    }
+
+    // Check for unrealistic readings based on meter type
+    const maxReadings = {
+      'PREPAID WATER': 999999,
+      'PREPAID ELECTRIC': 999999,
+      'CONVENTIONAL WATER': 999999,
+      'CONVENTIONAL ELECTRIC': 999999,
+      'default': 999999
+    };
+
+    const maxReading = maxReadings[meterType as keyof typeof maxReadings] || maxReadings.default;
+    
+    if (currentReading > maxReading) {
+      return `Reading exceeds maximum value for ${meterType} meter (${maxReading})`;
     }
 
     return null;
@@ -489,31 +529,65 @@ export default function MeterReadings() {
 
   const uploadPhotoToStorage = async (file: File, accountNumber: string, location: { latitude: number; longitude: number }) => {
     try {
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (file.size > maxSize) {
+        throw new Error('Photo size exceeds 5MB limit');
+      }
+
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('File must be an image');
+      }
+
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
       const fileName = `MeterReadings/${accountNumber}_${timestamp}.jpg`;
       const storageRef = ref(storage, fileName);
 
-      // Add metadata including location
+      // Compress image if needed
+      let compressedFile = file;
+      if (file.size > 1024 * 1024) { // If larger than 1MB
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true
+        };
+        try {
+          compressedFile = await imageCompression(file, options);
+        } catch (error) {
+          console.warn('Image compression failed, using original file:', error);
+        }
+      }
+
+      // Add metadata including location and timestamp
       const metadata = {
+        contentType: 'image/jpeg',
         customMetadata: {
           accountNumber,
           latitude: location.latitude.toString(),
           longitude: location.longitude.toString(),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          originalFileName: file.name,
+          deviceInfo: navigator.userAgent
         }
       };
 
-      // Upload file with metadata
-      const snapshot = await uploadBytes(storageRef, file, metadata);
-      console.log('Photo uploaded to Firebase Storage:', snapshot.metadata);
+      // Upload file with metadata and track progress
+      const uploadTask = uploadBytes(storageRef, compressedFile, metadata);
+      
+      // Show upload progress
+      toast.loading('Uploading photo...', { id: 'photo-upload' });
+      
+      const snapshot = await uploadTask;
+      console.log('Photo uploaded successfully:', snapshot.metadata);
+      toast.success('Photo uploaded successfully', { id: 'photo-upload' });
 
       // Get download URL
       const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('Photo download URL:', downloadURL);
-
       return downloadURL;
-    } catch (error) {
-      console.error('Error uploading photo to Firebase Storage:', error);
+    } catch (error: any) {
+      console.error('Error uploading photo:', error);
+      toast.error(`Failed to upload photo: ${error.message}`, { id: 'photo-upload' });
       throw error;
     }
   };
@@ -521,69 +595,163 @@ export default function MeterReadings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    
+    const toastId = toast.loading('Processing submission...');
+    
     try {
       if (!formData.photo) {
-        toast.error('Please take a photo of your meter reading');
+        toast.error('Please take a photo of your meter reading', { id: toastId });
         return;
       }
 
       if (!userLocation) {
-        toast.error('Location data is required. Please allow location access and try again.');
+        toast.error('Location data is required. Please allow location access and try again.', { id: toastId });
         return;
       }
 
       if (!userData?.accountNumber) {
-        toast.error('Account number is required');
+        toast.error('Account number is required', { id: toastId });
         return;
       }
 
       const lastReading = data[0]?.currentReading || 0;
       const currentReading = parseInt(formData.currentReading);
       
-      const error = validateReading(currentReading, lastReading);
+      // Enhanced validation
+      const error = validateReading(currentReading, lastReading, formData.meterType);
       if (error) {
-        toast.error(error);
-        return;
+        if (error.startsWith('Warning:')) {
+          const proceed = window.confirm(`${error}\n\nDo you want to proceed with submitting this reading?`);
+          if (!proceed) {
+            toast.error('Submission cancelled', { id: toastId });
+            return;
+          }
+        } else {
+          toast.error(error, { id: toastId });
+          return;
+        }
       }
 
-      toast.loading('Uploading meter reading...');
-
-      // Upload photo to Firebase Storage
+      // Upload photo with progress tracking
+      toast.loading('Uploading photo...', { id: toastId });
       const photoUrl = await uploadPhotoToStorage(formData.photo, userData.accountNumber, userLocation);
 
-      const newReading: MeterReading = {
-        accountNumber: userData.accountNumber,
-        meterNumber: customerMeterNumber || formData.meterNumber,
-        meterType: formData.meterType,
-        tariffCode: formData.tariffCode,
-        previousReading: lastReading,
-        currentReading: currentReading,
-        consumption: currentReading - lastReading,
-        photoUrl,
-        currentReadingDate: new Date(),
-        location: userLocation
-      };
+      // Get current date in YYYYMMDD format
+      const currentDate = format(new Date(), 'yyyyMMdd');
+      const currentPeriod = format(new Date(), 'yyyyMM');
 
-      console.log('Saving to Firebase:', newReading);
-      const docRef = await addDoc(collection(db, 'meterReadings'), {
-        ...newReading,
-        currentReadingDate: Timestamp.fromDate(newReading.currentReadingDate),
-      });
+      // Query for the existing document
+      toast.loading('Fetching account details...', { id: toastId });
+      const readingsRef = collection(db, 'meterReadings');
+      const q = query(
+        readingsRef,
+        where('AccountNo', '==', userData.accountNumber),
+        orderBy('CurrReadDate', 'desc'),
+        limit(1)
+      );
       
-      setData(prevData => {
-        const newData = [
-          {
-            ...newReading,
-            id: docRef.id,
-          },
-          ...prevData
-        ];
-        setStats(calculateStats(newData));
-        return newData;
-      });
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const existingData = querySnapshot.docs[0].data();
 
-      toast.dismiss();
-      toast.success('Meter reading submitted successfully');
+        // Create new reading document with retry logic
+        let retryCount = 0;
+        const maxRetries = 3;
+        let newReadingDoc;
+
+        while (retryCount < maxRetries) {
+          try {
+            toast.loading('Saving reading...', { id: toastId });
+            newReadingDoc = await addDoc(collection(db, 'meterReadings'), {
+              // Existing fields...
+              AccountNo: userData.accountNumber,
+              AccountHolder: existingData.AccountHolder,
+              Address: existingData.Address,
+              Description: existingData.Description,
+              MeterNumber: existingData.MeterNumber,
+              MeterType: existingData.MeterType,
+              TariffCode: existingData.TariffCode,
+              ErfNo: existingData.ErfNo,
+              Book: existingData.Book,
+              Suburb: existingData.Suburb,
+              Town: existingData.Town,
+              Ward: existingData.Ward,
+              
+              // New reading details
+              PrevRead: lastReading,
+              PrevReadDate: data[0]?.currentReadingDate ? format(data[0].currentReadingDate, 'yyyyMMdd') : existingData.CurrReadDate,
+              CurrRead: currentReading,
+              CurrReadDate: currentDate,
+              Period: currentPeriod,
+              Consumption: currentReading - lastReading,
+              photoUrl: photoUrl,
+              location: userLocation,
+              ReadType: 'CUSTOMER',
+              Status: 'PENDING_REVIEW',
+              createdAt: Timestamp.now(),
+              lastUpdated: Timestamp.now(),
+              Factor: existingData.Factor || 1,
+              AmpsPhase: existingData.AmpsPhase || '',
+              MeterAlpha: existingData.MeterAlpha || '',
+              Reservoir: existingData.Reservoir || ' ',
+              Seq: existingData.Seq || '',
+              LocalAuthority: existingData.LocalAuthority || '',
+              deviceInfo: navigator.userAgent,
+              submissionMethod: 'MOBILE_APP'
+            });
+            break;
+          } catch (error) {
+            retryCount++;
+            if (retryCount === maxRetries) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          }
+        }
+
+        if (!newReadingDoc) {
+          throw new Error('Failed to create new reading document');
+        }
+
+        // Update local state
+        const newReading: MeterReading = {
+          id: newReadingDoc.id,
+          accountNumber: userData.accountNumber,
+          meterNumber: existingData.MeterNumber,
+          meterType: existingData.MeterType,
+          tariffCode: existingData.TariffCode,
+          previousReading: lastReading,
+          currentReading: currentReading,
+          consumption: currentReading - lastReading,
+          photoUrl,
+          currentReadingDate: new Date(),
+          AccountHolder: existingData.AccountHolder,
+          Address: existingData.Address,
+          Description: existingData.Description,
+          location: userLocation
+        };
+
+        setData(prevData => {
+          const newData = [newReading, ...prevData];
+          setStats(calculateStats(newData));
+          return newData;
+        });
+
+        toast.success('Meter reading submitted successfully', { id: toastId });
+        
+        // Show consumption alert if there's a significant increase
+        const increase = ((currentReading - lastReading) / lastReading) * 100;
+        if (increase > 50) {
+          toast.warning(
+            `Your consumption has increased by ${increase.toFixed(1)}% compared to your last reading. ` +
+            'Consider checking for leaks or unusual usage patterns.',
+            { duration: 10000 }
+          );
+        }
+      } else {
+        toast.error('Could not find your meter reading record', { id: toastId });
+      }
+
+      // Reset state
       setShowCamera(false);
       setUserLocation(null);
       setFormData({
@@ -596,10 +764,13 @@ export default function MeterReadings() {
         photo: null
       });
       setShowSubmitForm(false);
-    } catch (error) {
-      console.error('Error in submission:', error);
-      toast.dismiss();
-      toast.error('Failed to submit meter reading');
+    } catch (error: any) {
+      console.error('Error submitting reading:', error);
+      toast.error(
+        `Failed to submit meter reading: ${error.message}. ` +
+        'Please try again or contact support if the problem persists.',
+        { id: toastId }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1117,56 +1288,87 @@ export default function MeterReadings() {
       )}
 
       {/* Readings Table */}
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <th
-                    key={header.id}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {table.getRowModel().rows.length > 0 ? (
-              table.getRowModel().rows.map(row => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  {row.getVisibleCells().map(cell => (
-                    <td
-                      key={cell.id}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+      <div className="space-y-4">
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map(header => (
+                    <th
+                      key={header.id}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </td>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </th>
                   ))}
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
-                >
-                  No meter readings found for your account
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {table.getRowModel().rows.length > 0 ? (
+                table.getRowModel().rows.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    {row.getVisibleCells().map(cell => (
+                      <td
+                        key={cell.id}
+                        className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={columns.length}
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center"
+                  >
+                    No meter readings found for your account
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="flex items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-700">
+              Page {table.getState().pagination.pageIndex + 1} of{' '}
+              {table.getPageCount()}
+            </span>
+            <span className="text-sm text-gray-700">
+              | Total: {table.getPrePaginationRowModel().rows.length} readings
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </button>
+            <button
+              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Loading State */}
