@@ -9,16 +9,16 @@ import {
   useReactTable,
   SortingState,
 } from '@tanstack/react-table';
-import { Search, Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TrendingUp, TrendingDown, AlertTriangle, ArrowUpDown } from 'lucide-react';
+import { Search, Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, TrendingUp, TrendingDown, AlertTriangle, ArrowUpDown, Download, Filter, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { collection, getDocs, query, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from 'react-modal';
 import AdminViewModal from './meter-readings/AdminViewModal';
-
-Modal.setAppElement('#root');
+import { useTheme } from '../contexts/ThemeContext';
+import ReactApexChart from 'react-apexcharts';
 
 interface MeterReading {
   id?: string;
@@ -48,6 +48,7 @@ const columnHelper = createColumnHelper<MeterReading>();
 
 export default function AdminMeterReadings() {
   const { currentUser } = useAuth();
+  const { isDarkMode } = useTheme();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -55,6 +56,157 @@ export default function AdminMeterReadings() {
   const [stats, setStats] = useState<ConsumptionStats | null>(null);
   const [selectedReading, setSelectedReading] = useState<MeterReading | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('month');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Prepare consumption chart data
+  const chartData = useMemo(() => {
+    if (!data.length) return null;
+
+    const sortedData = [...data]
+      .sort((a, b) => {
+        const dateA = a.currentReadingDate instanceof Timestamp ? a.currentReadingDate.toDate() : a.currentReadingDate;
+        const dateB = b.currentReadingDate instanceof Timestamp ? b.currentReadingDate.toDate() : b.currentReadingDate;
+        return dateA && dateB ? dateA.getTime() - dateB.getTime() : 0;
+      })
+      .slice(-10);
+
+    return {
+      options: {
+        chart: {
+          type: 'area',
+          toolbar: {
+            show: false
+          },
+          background: 'transparent'
+        },
+        dataLabels: {
+          enabled: false
+        },
+        stroke: {
+          curve: 'smooth',
+          width: 2
+        },
+        fill: {
+          type: 'gradient',
+          gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.7,
+            opacityTo: 0.3,
+            stops: [0, 90, 100]
+          }
+        },
+        theme: {
+          mode: isDarkMode ? 'dark' : 'light'
+        },
+        colors: ['#2563eb'],
+        xaxis: {
+          categories: sortedData.map(reading => 
+            reading.currentReadingDate instanceof Date 
+              ? format(reading.currentReadingDate, 'MMM dd')
+              : format(reading.currentReadingDate.toDate(), 'MMM dd')
+          ),
+          labels: {
+            style: {
+              colors: isDarkMode ? '#fff' : '#000'
+            }
+          },
+          axisBorder: {
+            show: false
+          },
+          axisTicks: {
+            show: false
+          }
+        },
+        yaxis: {
+          labels: {
+            style: {
+              colors: isDarkMode ? '#fff' : '#000'
+            },
+            formatter: (value: number) => value.toFixed(0)
+          }
+        },
+        grid: {
+          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+          strokeDashArray: 4,
+          xaxis: {
+            lines: {
+              show: true
+            }
+          },
+          yaxis: {
+            lines: {
+              show: true
+            }
+          }
+        },
+        tooltip: {
+          theme: isDarkMode ? 'dark' : 'light',
+          y: {
+            formatter: (value: number) => value.toFixed(2)
+          }
+        }
+      },
+      series: [{
+        name: 'Consumption',
+        data: sortedData.map(reading => reading.consumption)
+      }]
+    };
+  }, [data, isDarkMode]);
+
+  const StatusIndicator = ({ status, consumption, previousConsumption }: { status: string, consumption: number, previousConsumption?: number }) => {
+    const trend = previousConsumption
+      ? consumption > previousConsumption
+        ? <TrendingUp className="h-4 w-4 text-red-500" />
+        : <TrendingDown className="h-4 w-4 text-green-500" />
+      : null;
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          status === 'PENDING' 
+            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+            : 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+        }`}>
+          {status || 'APPROVED'}
+        </span>
+        {trend}
+      </div>
+    );
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setIsRefreshing(false);
+  };
+
+  const handleExport = () => {
+    const csvContent = [
+      ['Account Number', 'Meter Number', 'Current Reading', 'Consumption', 'Status', 'Date'].join(','),
+      ...data.map(reading => [
+        reading.accountNumber,
+        reading.meterNumber,
+        reading.currentReading,
+        reading.consumption,
+        reading.status || 'APPROVED',
+        reading.currentReadingDate instanceof Date 
+          ? format(reading.currentReadingDate, 'yyyy-MM-dd')
+          : format(reading.currentReadingDate.toDate(), 'yyyy-MM-dd')
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `meter-readings-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
 
   const columns = useMemo(
     () => [
@@ -94,13 +246,11 @@ export default function AdminMeterReadings() {
       columnHelper.accessor('status', {
         header: 'Status',
         cell: info => (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            info.getValue() === 'PENDING' 
-              ? 'bg-yellow-100 text-yellow-800'
-              : 'bg-green-100 text-green-800'
-          }`}>
-            {info.getValue() || 'APPROVED'}
-          </span>
+          <StatusIndicator 
+            status={info.getValue() || 'APPROVED'} 
+            consumption={info.row.original.consumption} 
+            previousConsumption={info.row.original.previousConsumption} 
+          />
         ),
       }),
     ],
@@ -190,55 +340,168 @@ export default function AdminMeterReadings() {
   });
 
   return (
-    <div className="space-y-8">
-      {/* Header with Search */}
+    <div className={`space-y-8 p-6 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50'}`}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-blue-600 to-blue-800 p-6 rounded-xl shadow-lg">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-2">Meter Readings Management</h1>
+          <p className="text-blue-100 text-sm">Monitor and manage all meter readings</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-5 w-5 text-white ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+        <div className="relative flex-1 max-w-md">
+          <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} h-4 w-4`} />
           <input
             type="text"
             value={globalFilter}
             onChange={e => setGlobalFilter(e.target.value)}
             placeholder="Search readings..."
-            className="pl-9 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full pl-9 pr-4 py-2 rounded-lg border ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-400' 
+                : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
           />
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`px-3 py-2 rounded-lg border ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700 text-white' 
+                : 'bg-white border-gray-300 text-gray-900'
+            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+          </select>
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value as 'week' | 'month' | 'year')}
+            className={`px-3 py-2 rounded-lg border ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700 text-white' 
+                : 'bg-white border-gray-300 text-gray-900'
+            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+          >
+            <option value="week">Last Week</option>
+            <option value="month">Last Month</option>
+            <option value="year">Last Year</option>
+          </select>
         </div>
       </div>
 
-      {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <p className="text-sm font-medium text-gray-600">Total Readings</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-              {stats.totalReadings.toLocaleString()}
-            </h3>
+          <div className={`p-6 rounded-xl shadow-sm border ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Total Readings
+                </p>
+                <h3 className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {stats.totalReadings.toLocaleString()}
+                </h3>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg dark:bg-blue-900">
+                <AlertTriangle className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <p className="text-sm font-medium text-gray-600">Average Consumption</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-              {stats.averageConsumption.toFixed(2)}
-            </h3>
+          <div className={`p-6 rounded-xl shadow-sm border ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Average Consumption
+                </p>
+                <h3 className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {stats.averageConsumption.toFixed(2)}
+                </h3>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg dark:bg-blue-900">
+                <AlertTriangle className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <p className="text-sm font-medium text-gray-600">Total Consumption</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-              {stats.totalConsumption.toLocaleString()}
-            </h3>
+          <div className={`p-6 rounded-xl shadow-sm border ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Total Consumption
+                </p>
+                <h3 className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {stats.totalConsumption.toLocaleString()}
+                </h3>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg dark:bg-blue-900">
+                <AlertTriangle className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <p className="text-sm font-medium text-gray-600">Pending Readings</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-              {stats.pendingReadings}
-            </h3>
+          <div className={`p-6 rounded-xl shadow-sm border ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Pending Readings
+                </p>
+                <h3 className={`text-2xl font-bold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {stats.pendingReadings}
+                </h3>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg dark:bg-blue-900">
+                <AlertTriangle className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Loading State */}
+      {/* Consumption Chart */}
+      {chartData && (
+        <div className={`p-6 rounded-xl shadow-sm border ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Consumption Trend
+          </h3>
+          <ReactApexChart
+            options={chartData.options}
+            series={chartData.series}
+            type="area"
+            height={350}
+          />
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center items-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-theme" />
@@ -304,7 +567,6 @@ export default function AdminMeterReadings() {
         </div>
       )}
 
-      {/* Pagination Controls */}
       <div className="flex items-center justify-between px-4 py-3 bg-white border rounded-lg">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700">
@@ -348,7 +610,6 @@ export default function AdminMeterReadings() {
         </div>
       </div>
 
-      {/* Details Modal */}
       <Modal
         isOpen={isModalOpen}
         onRequestClose={() => {
