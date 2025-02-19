@@ -547,6 +547,17 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
     );
   };
 
+  const handleLogout = async () => {
+    try {
+      console.log('Initiating logout...');
+      // Call the onLogout prop function
+      await onLogout();
+      console.log('Logout successful');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-bg flex flex-col">
       <div className="lg:hidden fixed top-4 left-4 z-50">
@@ -561,7 +572,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         onNavigate={(view) => setCurrentView(view)}
       />
 

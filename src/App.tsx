@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -28,6 +28,7 @@ import { Toaster } from 'react-hot-toast';
 import TrainingPage from './pages/train-model';
 import ModelTester from './chatbot-data/ModelTester';
 import ChatInterface from './chatbot-data/ChatInterface';
+import toast from 'react-hot-toast';
 
 interface User {
   email: string;
@@ -88,21 +89,59 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      console.log('Starting logout process...');
+      setIsLoading(true);
       await auth.signOut();
       setIsLoggedIn(false);
       setCurrentUser(null);
+      console.log('Logout successful, redirecting to home...');
+      // Clear any stored state if needed
+      localStorage.removeItem('lastView');
+      sessionStorage.clear();
+      
+      // Show success message
+      toast.success('Logged out successfully');
+      
+      // Force a reload to ensure clean state
+      window.location.href = '/';
+      
+      return true;
     } catch (error) {
       console.error('Error signing out:', error);
+      toast.error('Error logging out. Please try again.');
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleLoginSuccess = async (email: string) => {
     console.log('Login success for:', email);
+    toast.success('Logged in successfully');
   };
 
   const handleNewUserSignup = async (email: string, name: string) => {
     console.log('New user signup:', email, name);
   };
+
+  const LandingPage = () => (
+    <>
+      <Navbar
+        onLoginSuccess={handleLoginSuccess}
+        onNewUserSignup={handleNewUserSignup}
+      />
+      <main className="flex flex-col min-h-screen">
+        <Hero />
+        <Features />
+        <BillingControl />
+        <QuerySection />
+        <SecuritySection />
+        <CTASection />
+        <Footer />
+        <ScrollToTop />
+      </main>
+    </>
+  );
 
   const PrivateRoute: React.FC<{ element: React.ReactElement }> = ({ element }) => {
     if (isLoading) {
@@ -146,22 +185,7 @@ function App() {
                 isLoggedIn ? (
                   <Navigate to="/dashboard" />
                 ) : (
-                  <>
-                    <Navbar
-                      onLoginSuccess={handleLoginSuccess}
-                      onNewUserSignup={handleNewUserSignup}
-                    />
-                    <main className="flex flex-col min-h-screen">
-                      <Hero />
-                      <Features />
-                      <BillingControl />
-                      <QuerySection />
-                      <SecuritySection />
-                      <CTASection />
-                      <Footer />
-                      <ScrollToTop />
-                    </main>
-                  </>
+                  <LandingPage />
                 )
               }
             />
@@ -231,19 +255,31 @@ function App() {
               element={
                 <PrivateRoute
                   element={
-                    currentUser?.role === 'superadmin' ? (
+                    !currentUser ? (
+                      <Navigate to="/" />
+                    ) : currentUser.role === 'superadmin' ? (
                       <SuperAdminDashboard onLogout={handleLogout} />
-                    ) : currentUser?.role === 'admin' ? (
+                    ) : currentUser.role === 'admin' ? (
                       <AdminDashboard
                         onLogout={handleLogout}
-                        userEmail={currentUser.email}
-                        userName={currentUser.name}
-                        department={currentUser.department}
+                        userEmail={currentUser.email || ''}
+                        userName={currentUser.name || ''}
+                        department={currentUser.department || ''}
                       />
-                    ) : currentUser?.role === 'customer' ? (
-                      <CustomerDashboard />
+                    ) : currentUser.role === 'customer' ? (
+                      <CustomerDashboard 
+                        onLogout={handleLogout}
+                        userEmail={currentUser.email || ''}
+                        userName={currentUser.name || ''}
+                        accountNumber={currentUser.accountNumber || ''}
+                      />
                     ) : (
-                      <Dashboard />
+                      <Dashboard 
+                        onLogout={handleLogout}
+                        userEmail={currentUser.email || ''}
+                        userName={currentUser.name || ''}
+                        accountNumber={currentUser.accountNumber || ''}
+                      />
                     )
                   }
                 />
