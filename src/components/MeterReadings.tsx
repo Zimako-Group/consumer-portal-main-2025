@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   createColumnHelper,
   flexRender,
@@ -11,16 +11,12 @@ import {
 import { Search, Loader2, TrendingUp, TrendingDown, AlertTriangle, Plus, Download, LineChart } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { collection, getDocs, query, where, orderBy, addDoc, Timestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import ReactApexChart from 'react-apexcharts';
 import { ApexOptions } from 'apexcharts';
-
-// Cloudinary configuration
-const CLOUDINARY_UPLOAD_PRESET = 'MeterReadings'; // You'll need to create this in Cloudinary
-const CLOUDINARY_CLOUD_NAME = 'droca6gby'; // Your Cloudinary cloud name
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 interface MeterReading {
   id?: string;
@@ -463,6 +459,37 @@ export default function MeterReadings() {
     return null;
   };
 
+  const uploadPhotoToStorage = async (file: File, accountNumber: string, location: { latitude: number; longitude: number }) => {
+    try {
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = `MeterReadings/${accountNumber}_${timestamp}.jpg`;
+      const storageRef = ref(storage, fileName);
+
+      // Add metadata including location
+      const metadata = {
+        customMetadata: {
+          accountNumber,
+          latitude: location.latitude.toString(),
+          longitude: location.longitude.toString(),
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Upload file with metadata
+      const snapshot = await uploadBytes(storageRef, file, metadata);
+      console.log('Photo uploaded to Firebase Storage:', snapshot.metadata);
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      console.log('Photo download URL:', downloadURL);
+
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading photo to Firebase Storage:', error);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -477,6 +504,11 @@ export default function MeterReadings() {
         return;
       }
 
+      if (!userData?.accountNumber) {
+        toast.error('Account number is required');
+        return;
+      }
+
       const lastReading = data[0]?.currentReading || 0;
       const currentReading = parseInt(formData.currentReading);
       
@@ -486,17 +518,22 @@ export default function MeterReadings() {
         return;
       }
 
+      toast.loading('Uploading meter reading...');
+
+      // Upload photo to Firebase Storage
+      const photoUrl = await uploadPhotoToStorage(formData.photo, userData.accountNumber, userLocation);
+
       const newReading: MeterReading = {
-        accountNumber: userData?.accountNumber || '',
+        accountNumber: userData.accountNumber,
         meterNumber: customerMeterNumber || formData.meterNumber,
         meterType: formData.meterType,
         tariffCode: formData.tariffCode,
         previousReading: lastReading,
         currentReading: currentReading,
         consumption: currentReading - lastReading,
-        photoUrl: URL.createObjectURL(formData.photo),
+        photoUrl,
         currentReadingDate: new Date(),
-        location: userLocation // Add location to the reading
+        location: userLocation
       };
 
       console.log('Saving to Firebase:', newReading);
@@ -517,6 +554,7 @@ export default function MeterReadings() {
         return newData;
       });
 
+      toast.dismiss();
       toast.success('Meter reading submitted successfully');
       setShowCamera(false);
       setUserLocation(null);
@@ -532,6 +570,7 @@ export default function MeterReadings() {
       setShowSubmitForm(false);
     } catch (error) {
       console.error('Error in submission:', error);
+      toast.dismiss();
       toast.error('Failed to submit meter reading');
     } finally {
       setIsLoading(false);
