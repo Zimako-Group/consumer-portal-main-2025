@@ -12,7 +12,7 @@ import {
 import { Search, Loader2, TrendingUp, TrendingDown, AlertTriangle, Plus, Download, LineChart } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { collection, getDocs, query, where, orderBy, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, addDoc, Timestamp, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
