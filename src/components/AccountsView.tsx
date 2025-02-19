@@ -265,6 +265,22 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
     }
   };
 
+  const handleWhatsAppMessage = (profile: Profile) => {
+    if (!profile.cellNumber || profile.cellNumber === 'N/A') {
+      toast.error('Failed: No WhatsApp Number');
+      return;
+    }
+
+    // Format the phone number (remove spaces, add country code if needed)
+    let phoneNumber = profile.cellNumber.replace(/\s+/g, '');
+    if (!phoneNumber.startsWith('+')) {
+      phoneNumber = '+27' + phoneNumber.replace(/^0/, '');
+    }
+
+    // Open WhatsApp in a new window
+    window.open(`https://wa.me/${phoneNumber}`, '_blank');
+  };
+
   if (loading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
@@ -435,6 +451,18 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
                         title={profile.contactDetails?.email ? "Send Email" : "No email address available"}
                       >
                         <Mail className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => handleWhatsAppMessage(profile)}
+                        disabled={!profile.cellNumber}
+                        className={`flex items-center text-xs px-2.5 py-1.5 rounded-full
+                          ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}
+                          ${!profile.cellNumber && 'opacity-50 cursor-not-allowed'}
+                          transition-colors duration-200 text-green-500`}
+                        title={profile.cellNumber ? "Send WhatsApp Message" : "No phone number available"}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
