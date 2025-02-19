@@ -36,6 +36,7 @@ interface MeterReading {
   AccountHolder?: string;
   Address?: string;
   Description?: string;
+  location?: { latitude: number; longitude: number };
 }
 
 interface ConsumptionStats {
@@ -78,6 +79,7 @@ export default function MeterReadings() {
   });
   const [customerMeterNumber, setCustomerMeterNumber] = useState<string>('');
   const [showCamera, setShowCamera] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const videoRef = React.createRef<HTMLVideoElement>();
   const canvasRef = React.createRef<HTMLCanvasElement>();
 
@@ -185,7 +187,8 @@ export default function MeterReadings() {
             currentReadingDate: formattedDate,
             AccountHolder: data.AccountHolder,
             Address: data.Address,
-            Description: data.Description
+            Description: data.Description,
+            location: data.location
           });
         }
         
@@ -207,9 +210,10 @@ export default function MeterReadings() {
 
     const startCamera = async () => {
       try {
-        if (showCamera) {
+        // Only start camera if we have location permission
+        if (showCamera && userLocation) {
           stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' }, // Use back camera if available
+            video: { facingMode: 'environment' },
             audio: false 
           });
           
@@ -220,18 +224,44 @@ export default function MeterReadings() {
       } catch (error) {
         console.error('Error accessing camera:', error);
         toast.error('Unable to access camera. Please ensure you have given camera permissions.');
+        setShowCamera(false);
       }
     };
 
     startCamera();
 
-    // Cleanup function
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [showCamera]);
+  }, [showCamera, userLocation]);
+
+  const requestLocationAndCamera = async () => {
+    try {
+      // First request location
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        });
+      });
+
+      // Store location
+      setUserLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      });
+
+      // Then show camera
+      setShowCamera(true);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      toast.error('Location access is required to take meter readings. Please enable location services and try again.');
+      setShowCamera(false);
+    }
+  };
 
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
@@ -438,7 +468,12 @@ export default function MeterReadings() {
     setIsLoading(true);
     try {
       if (!formData.photo) {
-        toast.error('Please select a photo to upload');
+        toast.error('Please take a photo of your meter reading');
+        return;
+      }
+
+      if (!userLocation) {
+        toast.error('Location data is required. Please allow location access and try again.');
         return;
       }
 
@@ -461,6 +496,7 @@ export default function MeterReadings() {
         consumption: currentReading - lastReading,
         photoUrl: URL.createObjectURL(formData.photo),
         currentReadingDate: new Date(),
+        location: userLocation // Add location to the reading
       };
 
       console.log('Saving to Firebase:', newReading);
@@ -469,7 +505,6 @@ export default function MeterReadings() {
         currentReadingDate: Timestamp.fromDate(newReading.currentReadingDate),
       });
       
-      // Update local state instead of reloading
       setData(prevData => {
         const newData = [
           {
@@ -478,12 +513,13 @@ export default function MeterReadings() {
           },
           ...prevData
         ];
-        setStats(calculateStats(newData)); // Update stats as well
+        setStats(calculateStats(newData));
         return newData;
       });
 
       toast.success('Meter reading submitted successfully');
-      setShowSubmitForm(false);
+      setShowCamera(false);
+      setUserLocation(null);
       setFormData({
         accountNumber: '',
         meterNumber: '',
@@ -493,6 +529,7 @@ export default function MeterReadings() {
         tariffCode: '',
         photo: null
       });
+      setShowSubmitForm(false);
     } catch (error) {
       console.error('Error in submission:', error);
       toast.error('Failed to submit meter reading');
@@ -926,13 +963,13 @@ export default function MeterReadings() {
                           </svg>
                           <button
                             type="button"
-                            onClick={() => setShowCamera(true)}
+                            onClick={requestLocationAndCamera}
                             className="mt-2 px-4 py-2 text-sm font-medium text-white bg-theme rounded-md shadow-sm hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme"
                           >
                             Take Photo
                           </button>
                           <p className="mt-1 text-xs text-gray-500">
-                            Use your device's camera to take a clear photo of your meter reading
+                            Location access is required to take meter readings. Please ensure location services are enabled.
                           </p>
                         </div>
                       )}
