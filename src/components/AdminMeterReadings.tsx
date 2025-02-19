@@ -629,9 +629,9 @@ export default function AdminMeterReadings() {
         </div>
       )}
 
-      <div className="flex items-center justify-between px-4 py-3 bg-white border rounded-lg">
+      <div className={`flex items-center justify-between px-4 py-3 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white'} border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} rounded-lg`}>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700">
+          <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
             Page{' '}
             <span className="font-medium">
               {table.getState().pagination.pageIndex + 1}
@@ -642,32 +642,32 @@ export default function AdminMeterReadings() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="p-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`p-2 border rounded ${isDarkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
             onClick={() => table.setPageIndex(0)}
             disabled={!table.getCanPreviousPage()}
           >
-            <ChevronsLeft className="h-5 w-5" />
+            <ChevronsLeft className={`h-4 w-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
           </button>
           <button
-            className="p-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`p-2 border rounded ${isDarkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className={`h-4 w-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
           </button>
           <button
-            className="p-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`p-2 border rounded ${isDarkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className={`h-4 w-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
           </button>
           <button
-            className="p-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`p-2 border rounded ${isDarkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
             disabled={!table.getCanNextPage()}
           >
-            <ChevronsRight className="h-5 w-5" />
+            <ChevronsRight className={`h-4 w-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
           </button>
         </div>
       </div>
