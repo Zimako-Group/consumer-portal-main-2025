@@ -196,22 +196,39 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
 
   useEffect(() => {
     const fetchRecentActivities = async () => {
+      if (!accountNumber) {
+        console.log('No account number available, skipping activities fetch');
+        return;
+      }
+
       try {
         const activitiesRef = collection(db, 'activities');
-        const q = query(activitiesRef, where('accountNumber', '==', accountNumber), orderBy('date', 'desc'), limit(3));
+        const q = query(
+          activitiesRef, 
+          where('accountNumber', '==', accountNumber.trim()), 
+          orderBy('date', 'desc'), 
+          limit(3)
+        );
+        
         const querySnapshot = await getDocs(q);
         const activities: RecentActivity[] = [];
+        
         querySnapshot.forEach((doc) => {
-          activities.push({
-            type: doc.data().type,
-            description: doc.data().description,
-            date: format(doc.data().date.toDate(), 'dd MMM yyyy')
-          });
+          const data = doc.data();
+          if (data.date) {
+            activities.push({
+              type: data.type || 'Unknown',
+              description: data.description || 'No description available',
+              date: data.date.toDate ? format(data.date.toDate(), 'dd MMM yyyy') : format(new Date(data.date), 'dd MMM yyyy')
+            });
+          }
         });
+        
         console.log('Fetched recent activities:', activities);
         setRecentActivities(activities);
       } catch (error) {
         console.error('Error fetching recent activities:', error);
+        setRecentActivities([]);
       }
     };
 
