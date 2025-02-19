@@ -111,7 +111,7 @@ function App() {
     return isLoggedIn ? element : <Navigate to="/" />;
   };
 
-  if (isLoading && !currentUser && !isLoggedIn) {
+  if (isLoading) {
     return <LoadingSpinner />;
   }
 
@@ -142,80 +142,97 @@ function App() {
           <Routes>
             <Route
               path="/"
-              element={isLoggedIn ? <Navigate to="/dashboard" /> : (
-                <div className="flex flex-col min-h-screen">
+              element={
+                isLoggedIn ? (
+                  <Navigate to="/dashboard" />
+                ) : (
+                  <>
+                    <Navbar
+                      onLoginSuccess={handleLoginSuccess}
+                      onNewUserSignup={handleNewUserSignup}
+                    />
+                    <main className="flex flex-col min-h-screen">
+                      <Hero />
+                      <Features />
+                      <BillingControl />
+                      <QuerySection />
+                      <SecuritySection />
+                      <CTASection />
+                      <Footer />
+                      <ScrollToTop />
+                    </main>
+                  </>
+                )
+              }
+            />
+            
+            <Route
+              path="/services"
+              element={
+                <>
                   <Navbar
                     onLoginSuccess={handleLoginSuccess}
                     onNewUserSignup={handleNewUserSignup}
                   />
-                  <main>
-                    <Hero />
-                    <Features />
-                    <BillingControl />
-                    <QuerySection />
-                    <SecuritySection />
-                    <CTASection />
-                  </main>
-                  <Footer />
-                  <ScrollToTop />
-                </div>
-              )}
-            />
-            <Route
-              path="/services"
-              element={
-                <div className="flex flex-col min-h-screen">
-                  <Navbar />
                   <FooterService />
                   <Footer />
                   <ScrollToTop />
-                </div>
+                </>
               }
             />
+            
             <Route
               path="/about"
               element={
-                <div className="flex flex-col min-h-screen">
-                  <Navbar />
+                <>
+                  <Navbar
+                    onLoginSuccess={handleLoginSuccess}
+                    onNewUserSignup={handleNewUserSignup}
+                  />
                   <About />
                   <Footer />
                   <ScrollToTop />
-                </div>
+                </>
               }
             />
+            
             <Route
               path="/faq"
               element={
-                <div className="flex flex-col min-h-screen">
-                  <Navbar />
+                <>
+                  <Navbar
+                    onLoginSuccess={handleLoginSuccess}
+                    onNewUserSignup={handleNewUserSignup}
+                  />
                   <FAQ />
                   <Footer />
                   <ScrollToTop />
-                </div>
+                </>
               }
             />
+            
             <Route
               path="/contact"
               element={
-                <div className="flex flex-col min-h-screen">
-                  <Navbar />
+                <>
+                  <Navbar
+                    onLoginSuccess={handleLoginSuccess}
+                    onNewUserSignup={handleNewUserSignup}
+                  />
                   <Contact />
                   <Footer />
                   <ScrollToTop />
-                </div>
+                </>
               }
             />
+
             <Route
-              path="/dashboard"
+              path="/dashboard/*"
               element={
                 <PrivateRoute
                   element={
                     currentUser?.role === 'superadmin' ? (
-                      <SuperAdminDashboard
-                        onLogout={handleLogout}
-                        userEmail={currentUser.email}
-                        userName={currentUser.name}
-                      />
+                      <SuperAdminDashboard onLogout={handleLogout} />
                     ) : currentUser?.role === 'admin' ? (
                       <AdminDashboard
                         onLogout={handleLogout}
@@ -223,23 +240,30 @@ function App() {
                         userName={currentUser.name}
                         department={currentUser.department}
                       />
+                    ) : currentUser?.role === 'customer' ? (
+                      <CustomerDashboard />
                     ) : (
-                      <Dashboard
-                        onLogout={handleLogout}
-                        userEmail={currentUser.email}
-                        userName={currentUser.name}
-                        accountNumber={currentUser.accountNumber}
-                      />
+                      <Dashboard />
                     )
                   }
                 />
               }
             />
-            <Route path="/statement" element={<StatementGenerator />} />
-            <Route path="/payment/confirm" element={<PaymentConfirmation />} />
-            <Route path="/train-model" element={<TrainingPage />} />
-            <Route path="/test-model" element={<ModelTester />} />
-            <Route path="/model-chat" element={<ChatInterface />} />
+
+            <Route
+              path="/train-model"
+              element={
+                <PrivateRoute
+                  element={
+                    currentUser?.role === 'superadmin' ? (
+                      <TrainingPage />
+                    ) : (
+                      <Navigate to="/dashboard" />
+                    )
+                  }
+                />
+              }
+            />
           </Routes>
         </div>
       </ThemeProvider>

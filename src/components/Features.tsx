@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
-import { CreditCard, Clock, FileText, MessageSquare, Activity, ArrowRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { CreditCard, Clock, FileText, MessageSquare, Activity, ArrowRight, AlertCircle } from 'lucide-react';
+import { motion, useInView } from 'framer-motion';
 import AuthModal from './AuthModal';
 
-const benefits = [
+interface Benefit {
+  icon: JSX.Element;
+  title: string;
+  description: string;
+  primary?: boolean;
+  image?: string;
+  fallbackImage?: string;
+}
+
+const benefits: Benefit[] = [
   {
     icon: <CreditCard className="w-8 h-8 text-orange-600" />,
     title: 'Instant Online Payments',
     description: 'Using our secure payment platform, YeboPay, you can make quick and hassle-free payments directly through the Consumer Portal.',
     primary: true,
-    image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&q=80'
+    image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&q=80',
+    fallbackImage: 'https://images.unsplash.com/photo-1580048915913-4f8f5cb481c4?auto=format&fit=crop&q=80'
   },
   {
     icon: <Clock className="w-8 h-8 text-orange-600" />,
@@ -38,7 +48,8 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.2
+      staggerChildren: 0.2,
+      delayChildren: 0.3
     }
   }
 };
@@ -47,12 +58,27 @@ const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
-    y: 0
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 15
+    }
   }
 };
 
-export default function Features() {
+interface FeaturesProps {
+  onLoginSuccess?: () => void;
+}
+
+export default function Features({ onLoginSuccess }: FeaturesProps) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const handleImageError = () => {
+    console.warn('Primary feature image failed to load, using fallback');
+    setImageError(true);
+  };
 
   return (
     <section id="features" className="relative py-12 overflow-hidden bg-gradient-to-b from-white via-orange-50/30 to-white">
@@ -67,7 +93,7 @@ export default function Features() {
           <motion.h2 
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            viewport={{ once: true, margin: "-100px" }}
             className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4 tracking-tight"
           >
             Benefits of Consumer Portal
@@ -75,7 +101,7 @@ export default function Features() {
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            viewport={{ once: true, margin: "-100px" }}
             transition={{ delay: 0.2 }}
             className="text-xl text-gray-600 max-w-3xl mx-auto"
           >
@@ -87,7 +113,7 @@ export default function Features() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+          viewport={{ once: true, margin: "-100px" }}
           className="mb-16"
         >
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-orange-600 to-orange-500 shadow-2xl">
@@ -95,18 +121,31 @@ export default function Features() {
             <div className="relative flex flex-col lg:flex-row items-center">
               {/* Content Side */}
               <div className="w-full lg:w-1/2 p-12 lg:p-16 text-white">
-                <div className="p-3 bg-white/10 rounded-2xl inline-block backdrop-blur-sm mb-6">
+                <motion.div 
+                  className="p-3 bg-white/10 rounded-2xl inline-block backdrop-blur-sm mb-6"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <CreditCard className="w-8 h-8 text-white" />
-                </div>
+                </motion.div>
                 <h3 className="text-3xl font-bold mb-4">Instant Online Payments</h3>
                 <p className="text-white/90 text-lg mb-8 leading-relaxed">
-                  Experience seamless transactions with our secure <a href="https://yebopay.co.za/" target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-purple-200 font-medium transition-colors">YeboPay</a> platform. Pay your municipal bills instantly, track your payment history, and manage your accounts all in one place.
+                  Experience seamless transactions with our secure{' '}
+                  <a 
+                    href="https://yebopay.co.za/" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-purple-300 hover:text-purple-200 font-medium transition-colors underline decoration-2 decoration-purple-400/30 hover:decoration-purple-400"
+                  >
+                    YeboPay
+                  </a>{' '}
+                  platform. Pay your municipal bills instantly, track your payment history, and manage your accounts all in one place.
                 </p>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setIsAuthModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-8 py-3 bg-white text-orange-600 rounded-full font-semibold hover:bg-orange-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-orange-600 group"
+                  className="inline-flex items-center gap-2 px-8 py-3 bg-white text-orange-600 rounded-full font-semibold hover:bg-orange-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-orange-600 group shadow-lg"
                 >
                   Make Payment
                   <ArrowRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
@@ -115,9 +154,10 @@ export default function Features() {
               {/* Image Side - Desktop Only */}
               <div className="hidden lg:block w-1/2 h-full">
                 <img
-                  src="https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&q=80"
+                  src={imageError ? benefits[0].fallbackImage : benefits[0].image}
                   alt="Online Payment"
-                  className="w-full h-full object-cover object-center transform scale-110"
+                  className="w-full h-full object-cover object-center transform scale-110 transition-transform duration-700 hover:scale-125"
+                  onError={handleImageError}
                 />
               </div>
             </div>
@@ -136,20 +176,28 @@ export default function Features() {
             <motion.div
               key={index}
               variants={itemVariants}
-              className="group relative overflow-hidden rounded-2xl bg-white p-8 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+              whileHover={{ 
+                scale: 1.02,
+                transition: { type: "spring", stiffness: 400, damping: 10 }
+              }}
+              className="group relative overflow-hidden rounded-2xl bg-white p-8 shadow-lg hover:shadow-xl transition-all duration-300"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="relative flex items-start gap-6">
                 <div className="flex-shrink-0">
-                  <div className="p-3.5 bg-orange-100 rounded-xl group-hover:bg-orange-200 transition-colors">
+                  <motion.div 
+                    className="p-3.5 bg-orange-100 rounded-xl group-hover:bg-orange-200 transition-colors"
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
                     {benefit.icon}
-                  </div>
+                  </motion.div>
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold mb-3 text-gray-900">
+                  <h3 className="text-xl font-semibold mb-3 text-gray-900 group-hover:text-orange-600 transition-colors">
                     {benefit.title}
                   </h3>
-                  <p className="text-gray-600 leading-relaxed">
+                  <p className="text-gray-600 leading-relaxed group-hover:text-gray-700 transition-colors">
                     {benefit.description}
                   </p>
                 </div>
@@ -162,6 +210,7 @@ export default function Features() {
       <AuthModal 
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={onLoginSuccess}
       />
 
       <style jsx>{`
