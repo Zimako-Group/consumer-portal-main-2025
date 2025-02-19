@@ -198,68 +198,56 @@ export default function Payment() {
           </h2>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Account Holder</p>
-              <p className="text-lg font-medium text-gray-900 dark:text-white">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-1 sm:space-y-2">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Account Holder</p>
+              <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                 {paymentDetails.name}
               </p>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Account Number</p>
-              <p className="text-lg font-medium text-gray-900 dark:text-white">
+            <div className="space-y-1 sm:space-y-2">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Account Number</p>
+              <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                 {paymentDetails.accountNumber}
               </p>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Last Payment Date</p>
-              <p className="text-lg font-medium text-gray-900 dark:text-white">
+            <div className="space-y-1 sm:space-y-2">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Last Payment Date</p>
+              <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                 {paymentDetails.lastPaymentDate ? format(new Date(paymentDetails.lastPaymentDate), 'PPP') : 'No payment recorded'}
               </p>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Last Amount Paid</p>
-              <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
+            <div className="space-y-1 sm:space-y-2">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Last Amount Paid</p>
+              <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                 {formatCurrency(paymentDetails.lastAmountPaid)}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Amount Due</p>
-              <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
-                {formatCurrency(paymentDetails.amountDue)}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Due Date</p>
-              <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
-                {paymentDetails.dueDate ? format(new Date(paymentDetails.dueDate), 'PPP') : 'Not set'}
               </p>
             </div>
           </div>
 
-          <div className="mt-8 p-6 bg-gray-50 dark:bg-dark-hover rounded-lg">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Amount Due</p>
-                <p className="text-sm sm:text-base lg:text-lg font-bold text-gray-900 dark:text-white">
+          <div className="mt-4 sm:mt-6 p-4 sm:p-6 bg-gray-50 dark:bg-dark-hover rounded-lg">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+              <div className="w-full sm:w-auto">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Amount Due</p>
+                <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
                   {formatCurrency(paymentDetails.amountDue)}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Due Date</p>
-                <p className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 dark:text-white">
+              <div className="w-full sm:w-auto text-left sm:text-right">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Due Date</p>
+                <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">
                   {paymentDetails.dueDate ? format(new Date(paymentDetails.dueDate), 'PPP') : 'Not set'}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col sm:flex-row sm:justify-end gap-4">
+          <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:justify-end gap-3 sm:gap-4">
             <button
               onClick={handlePayNow}
               disabled={loading || !userData?.accountNumber}
-              className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-theme hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme disabled:opacity-50"
+              className="w-full sm:w-auto inline-flex justify-center items-center px-3 sm:px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-theme hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-theme disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-flex items-center">
@@ -268,7 +256,7 @@ export default function Payment() {
                 </span>
               ) : (
                 <>
-                  <CreditCard className="w-5 h-5 mr-2" />
+                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                   Pay Now
                 </>
               )}
