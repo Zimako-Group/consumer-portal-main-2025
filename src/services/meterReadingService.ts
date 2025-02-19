@@ -114,20 +114,6 @@ export const uploadMeterReadings = async (
 
     console.log(`Uploading to collection: meterReadings/${year}/${month}`);
 
-    // Delete existing readings for this month
-    progress.phase = 'deleting';
-    onProgress?.(progress);
-
-    const existingDocs = await getDocs(monthCollectionRef);
-    console.log(`Found ${existingDocs.size} existing documents to delete`);
-
-    const deleteBatch = writeBatch(db);
-    existingDocs.forEach((doc) => {
-      deleteBatch.delete(doc.ref);
-    });
-    await deleteBatch.commit();
-    console.log('Existing documents deleted');
-
     // Upload new readings in batches
     const BATCH_SIZE = 500;
     const totalBatches = Math.ceil(readings.length / BATCH_SIZE);
@@ -153,7 +139,8 @@ export const uploadMeterReadings = async (
           month: month
         };
 
-        batch.set(docRef, readingWithMetadata);
+        // Use set with merge option to update existing documents or create new ones
+        batch.set(docRef, readingWithMetadata, { merge: true });
       });
 
       await batch.commit();
