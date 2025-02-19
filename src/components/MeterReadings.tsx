@@ -85,15 +85,22 @@ export default function MeterReadings() {
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(5);
 
-  // Reset form data when modal opens
+  // Update form data when readings are loaded
   useEffect(() => {
-    if (showSubmitForm && data.length > 0) {
+    if (data.length > 0) {
+      const latestReading = data[0]; // Get the most recent reading
       setFormData(prev => ({
         ...prev,
-        meterNumber: data[0].meterNumber, // Auto-populate with latest meter number
+        accountNumber: userData?.accountNumber || '',
+        meterNumber: latestReading.meterNumber,
+        meterType: latestReading.meterType,
+        tariffCode: latestReading.tariffCode,
+        currentReading: '',
+        readingDate: format(new Date(), 'yyyy-MM-dd'),
+        photo: null
       }));
     }
-  }, [showSubmitForm, data]);
+  }, [data, userData]);
 
   useEffect(() => {
     const fetchMeterNumber = async () => {
@@ -1084,9 +1091,9 @@ export default function MeterReadings() {
                   <input
                     type="text"
                     id="accountNumber"
-                    value={userData?.accountNumber || ''}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-theme focus:ring-theme sm:text-sm bg-gray-50"
+                    value={formData.accountNumber}
                     readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                   />
                   <p className="mt-1 text-sm text-gray-500">Your municipal account number</p>
                 </div>
@@ -1098,9 +1105,9 @@ export default function MeterReadings() {
                   <input
                     type="text"
                     id="meterNumber"
-                    value={customerMeterNumber || ''}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-theme focus:ring-theme sm:text-sm bg-gray-50"
+                    value={formData.meterNumber}
                     readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                   />
                   <p className="mt-1 text-sm text-gray-500">Auto-populated from your account</p>
                 </div>
@@ -1113,8 +1120,8 @@ export default function MeterReadings() {
                     type="text"
                     id="meterType"
                     value={formData.meterType}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-theme focus:ring-theme sm:text-sm bg-gray-50"
                     readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                   />
                   <p className="mt-1 text-sm text-gray-500">Auto-populated from your account</p>
                 </div>
@@ -1127,8 +1134,8 @@ export default function MeterReadings() {
                     type="text"
                     id="tariffCode"
                     value={formData.tariffCode}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-theme focus:ring-theme sm:text-sm bg-gray-50"
                     readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
                   />
                   <p className="mt-1 text-sm text-gray-500">Auto-populated from your account</p>
                 </div>
@@ -1142,8 +1149,7 @@ export default function MeterReadings() {
                     id="currentReading"
                     value={formData.currentReading}
                     onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-theme focus:ring-theme sm:text-sm"
-                    placeholder="Enter current reading"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     required
                   />
                 </div>
