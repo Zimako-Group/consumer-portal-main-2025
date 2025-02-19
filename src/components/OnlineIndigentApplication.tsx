@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Save, Send, User, Home, Phone, FileText, AlertCircle, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { db } from '../firebaseConfig';
+import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface OnlineIndigentApplicationProps {
   onClose: () => void;
@@ -85,7 +89,10 @@ const EMPLOYMENT_STATUS_OPTIONS = [
 ];
 
 const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ onClose }) => {
+  const { currentUser } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
+  const [shouldSave, setShouldSave] = useState(false);
   const [formData, setFormData] = useState({
     // Personal Information
     fullName: '',
@@ -116,7 +123,85 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
     idDocument: null as File | null,
     proofOfResidence: null as File | null,
     bankStatements: null as File | null,
+
+    // Application Status
+    lastSaved: null as string | null,
+    status: 'draft' as 'draft' | 'submitted',
+    currentStep: 1
   });
+
+  // Load saved application data
+  useEffect(() => {
+    const loadSavedApplication = async () => {
+      if (!currentUser?.email) return;
+
+      try {
+        const applicationRef = doc(db, 'indigentApplications', currentUser.email);
+        const applicationDoc = await getDoc(applicationRef);
+
+        if (applicationDoc.exists() && applicationDoc.data().status === 'draft') {
+          const savedData = applicationDoc.data();
+          setFormData(prev => ({
+            ...prev,
+            ...savedData,
+            // Don't restore file uploads as they can't be stored directly
+            idDocument: null,
+            proofOfResidence: null,
+            bankStatements: null
+          }));
+          setCurrentStep(savedData.currentStep || 1);
+          toast.success('Loaded your saved application');
+        }
+      } catch (error) {
+        console.error('Error loading saved application:', error);
+        toast.error('Failed to load saved application');
+      }
+    };
+
+    loadSavedApplication();
+  }, [currentUser]);
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (!shouldSave) return;
+
+    const autoSaveApplication = async () => {
+      if (!currentUser?.email || formData.status === 'submitted') return;
+
+      try {
+        setAutoSaveStatus('saving');
+        const applicationRef = doc(db, 'indigentApplications', currentUser.email);
+        
+        // Create a save-safe version of the form data (excluding File objects)
+        const saveData = {
+          ...formData,
+          idDocument: null,
+          proofOfResidence: null,
+          bankStatements: null,
+          lastSaved: new Date().toISOString(),
+          currentStep
+        };
+
+        await setDoc(applicationRef, saveData, { merge: true });
+        setAutoSaveStatus('saved');
+        
+        // Update the form data with the save time
+        setFormData(prev => ({
+          ...prev,
+          lastSaved: saveData.lastSaved
+        }));
+      } catch (error) {
+        console.error('Error auto-saving application:', error);
+        setAutoSaveStatus('error');
+      } finally {
+        setShouldSave(false);
+      }
+    };
+
+    // Debounce the auto-save to prevent too frequent saves
+    const timeoutId = setTimeout(autoSaveApplication, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [shouldSave, formData, currentStep, currentUser]);
 
   const [idErrors, setIdErrors] = useState({
     idNumber: '',
@@ -144,12 +229,17 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         [name]: value
       }));
     }
+    
+    // Trigger auto-save after user input
+    setShouldSave(true);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
     const file = e.target.files?.[0];
     if (file) {
       setFormData(prev => ({ ...prev, [fieldName]: file }));
+      // Trigger auto-save after file upload
+      setShouldSave(true);
     }
   };
 
@@ -180,6 +270,9 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         }
       })
     }));
+    
+    // Trigger auto-save after dependants change
+    setShouldSave(true);
   };
 
   const handleOccupantChange = (index: number, field: keyof Occupant | 'employment.companyName' | 'employment.address' | 'employment.employerContact' | 'employment.salary' | 'employment.employmentStatus', value: string) => {
@@ -205,6 +298,9 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         };
       })
     }));
+    
+    // Trigger auto-save after occupant change
+    setShouldSave(true);
   };
 
   const handleOccupantIdNumberChange = (index: number, value: string) => {
@@ -277,9 +373,18 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         }
         break;
       case 3:
-        if (!formData.employmentDetails.companyName || !formData.employmentDetails.salary) {
-          toast.error('Please fill in all required fields');
+        if (!formData.employmentDetails.employmentStatus) {
+          toast.error('Please select your employment status');
           return false;
+        }
+        if (formData.employmentDetails.employmentStatus !== 'Unemployed') {
+          if (!formData.employmentDetails.companyName || 
+              !formData.employmentDetails.address || 
+              !formData.employmentDetails.employerContact || 
+              !formData.employmentDetails.salary) {
+            toast.error('Please fill in all employment details');
+            return false;
+          }
         }
         break;
       case 4:
@@ -693,72 +798,37 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
         );
       case 3:
         return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Company Name *
-              </label>
-              <input
-                type="text"
-                name="employmentDetails.companyName"
-                value={formData.employmentDetails.companyName}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
-                placeholder="Enter company name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Address *
-              </label>
-              <input
-                type="text"
-                name="employmentDetails.address"
-                value={formData.employmentDetails.address}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
-                placeholder="Enter address"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Tel/Cell of Employer *
-              </label>
-              <input
-                type="text"
-                name="employmentDetails.employerContact"
-                value={formData.employmentDetails.employerContact}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
-                placeholder="Enter employer contact"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Salary per w/m *
-              </label>
-              <input
-                type="text"
-                name="employmentDetails.salary"
-                value={formData.employmentDetails.salary}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
-                placeholder="Enter salary"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="space-y-6">
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">
+              Please select your employment status to proceed
+            </p>
+
+            {/* Employment Status Dropdown - Always shown first */}
+            <div className="space-y-2 max-w-md mx-auto">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Employment Status *
               </label>
               <select
                 name="employmentDetails.employmentStatus"
                 value={formData.employmentDetails.employmentStatus}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                onChange={(e) => {
+                  handleInputChange(e);
+                  // Clear employment details if switching to unemployed
+                  if (e.target.value === 'Unemployed') {
+                    setFormData(prev => ({
+                      ...prev,
+                      employmentDetails: {
+                        ...prev.employmentDetails,
+                        companyName: '',
+                        address: '',
+                        employerContact: '',
+                        salary: '',
+                        employmentStatus: 'Unemployed'
+                      }
+                    }));
+                  }
+                }}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white text-base"
                 required
               >
                 <option value="">Select employment status</option>
@@ -769,6 +839,98 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
                 ))}
               </select>
             </div>
+
+            <AnimatePresence mode="wait">
+              {(formData.employmentDetails.employmentStatus === 'Permanent' || 
+                formData.employmentDetails.employmentStatus === 'Seasonal') && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6 mt-8 max-w-2xl mx-auto"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Company Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="employmentDetails.companyName"
+                        value={formData.employmentDetails.companyName}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                        placeholder="Enter company name"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Monthly Salary *
+                      </label>
+                      <input
+                        type="text"
+                        name="employmentDetails.salary"
+                        value={formData.employmentDetails.salary}
+                        onChange={(e) => {
+                          // Only allow numbers and decimal points
+                          const value = e.target.value.replace(/[^\d.]/g, '');
+                          // Ensure only one decimal point
+                          const parts = value.split('.');
+                          const formatted = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : value;
+                          handleInputChange({
+                            ...e,
+                            target: { ...e.target, value: formatted }
+                          });
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                        placeholder="Enter monthly salary"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Company Address *
+                      </label>
+                      <input
+                        type="text"
+                        name="employmentDetails.address"
+                        value={formData.employmentDetails.address}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                        placeholder="Enter company address"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Employer Contact *
+                      </label>
+                      <input
+                        type="tel"
+                        name="employmentDetails.employerContact"
+                        value={formData.employmentDetails.employerContact}
+                        onChange={(e) => {
+                          // Only allow numbers and basic phone number characters
+                          const value = e.target.value.replace(/[^\d+\-() ]/g, '');
+                          handleInputChange({
+                            ...e,
+                            target: { ...e.target, value }
+                          });
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover text-gray-900 dark:text-white"
+                        placeholder="Enter employer contact number"
+                        required
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         );
       case 4:
@@ -875,6 +1037,34 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
     }
   };
 
+  const renderAutoSaveStatus = () => {
+    switch (autoSaveStatus) {
+      case 'saving':
+        return (
+          <div className="flex items-center text-gray-500 text-sm">
+            <Save className="w-4 h-4 mr-1 animate-pulse" />
+            Saving...
+          </div>
+        );
+      case 'saved':
+        return (
+          <div className="flex items-center text-green-500 text-sm">
+            <Save className="w-4 h-4 mr-1" />
+            Saved {formData.lastSaved ? new Date(formData.lastSaved).toLocaleTimeString() : ''}
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex items-center text-red-500 text-sm">
+            <AlertCircle className="w-4 h-4 mr-1" />
+            Error saving
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-dark-card rounded-2xl p-4 sm:p-6 md:p-8 w-full max-w-4xl shadow-2xl transform transition-all overflow-y-auto max-h-[90vh]">
@@ -887,6 +1077,11 @@ const OnlineIndigentApplication: React.FC<OnlineIndigentApplicationProps> = ({ o
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+
+        {/* Auto-save Status */}
+        <div className="absolute top-2 left-2 sm:top-4 sm:left-4">
+          {renderAutoSaveStatus()}
+        </div>
 
         {/* Progress Steps */}
         <div className="mb-8">
