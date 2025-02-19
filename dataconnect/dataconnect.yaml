@@ -1,0 +1,12 @@
+specVersion: "v1beta"
+serviceId: "consumer-portal-main"
+location: "europe-west1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fdcdb"
+      cloudSql:
+        instanceId: "consumer-portal-main-fdc"
+      # schemaValidation: "COMPATIBLE"
+connectorDirs: ["./connector"]

@@ -1,0 +1,203 @@
+import React, { useState, useEffect } from 'react';
+import { DollarSign, FileText, Activity, MessageSquare, Users, CreditCard, Building2, MessageCircle } from 'lucide-react';
+import SuperAdminNav from './SuperAdminNav';
+import ChangeLog from './ChangeLog';
+import CsmBalanceReportUpload from './CsmBalanceReportUpload';
+import CustomerDashboard from './CustomerDashboard';
+import MeterReadingsUpload from './MeterReadingsUpload';
+import DetailedAgedAnalysisUpload from './DetailedAgedAnalysisUpload';
+import QueryManagement from './QueryManagement';
+import CreateAdminUser from './CreateAdminUser';
+import ViewStatements from './ViewStatements';
+import SuperPaymentReminder from './SuperPaymentReminder';
+import DetailedLeviedUpload from './DetailedLeviedUpload';
+import StatsCard from './StatsCard';
+import FeatureCard from './FeatureCard';
+import ZimakoAIChatBot from './ZimakoAIChatBot';
+import ActiveUsersCard from './analytics/ActiveUsersCard';
+import { useTheme } from '../contexts/ThemeContext';
+import jellyfishBg from '../assets/jellyfish-bg.svg';
+import '../styles/dashboard.css';
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 18) return 'Good Afternoon';
+  return 'Good Evening';
+};
+
+export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void }) {
+  const { isDarkMode } = useTheme();
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder'>('dashboard');
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  const statsData = [
+    {
+      title: "Total Revenue",
+      value: "R53,000",
+      change: 5.5,
+      icon: <DollarSign className="text-blue-500" size={24} />,
+      iconBgColor: "bg-blue-100 dark:bg-blue-900/20"
+    },
+    {
+      title: "Active Users",
+      value: "2,300",
+      change: 3.2,
+      icon: <Users className="text-purple-500" size={24} />,
+      iconBgColor: "bg-purple-100 dark:bg-purple-900/20"
+    },
+    {
+      title: "Total Meters",
+      value: "+3,052",
+      change: -1.8,
+      icon: <Building2 className="text-orange-500" size={24} />,
+      iconBgColor: "bg-orange-100 dark:bg-orange-900/20"
+    },
+    {
+      title: "Total Payments",
+      value: "R173,000",
+      change: 8.0,
+      icon: <CreditCard className="text-green-500" size={24} />,
+      iconBgColor: "bg-green-100 dark:bg-green-900/20"
+    }
+  ];
+
+  return (
+    <div className={`min-h-screen ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
+      <div className="flex flex-col h-screen">
+        {/* Top Navigation */}
+        <SuperAdminNav onLogout={onLogout} onViewChange={setCurrentView} currentView={currentView} />
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-auto">
+          <main className={`${currentView === 'queries' ? 'h-full' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'}`}>
+            {currentView === 'changelog' ? (
+              <ChangeLog />
+            ) : currentView === 'reports' ? (
+              <div className="p-8">
+                <div className="mb-8">
+                  <h1 className="text-2xl font-bold mb-2 dark:text-white text-black">Reports</h1>
+                  <p className="text-gray-600 dark:text-white text-black">
+                    Upload and manage CSM reports
+                  </p>
+                </div>
+                <div className="space-y-8">
+                  {/* CSM Balance Report Section */}
+                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload CSM Balance Report</h2>
+                    <CsmBalanceReportUpload />
+                  </div>
+
+                  {/* Meter Readings Report Section */}
+                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload CSM Meter Readings Report</h2>
+                    <MeterReadingsUpload />
+                  </div>
+
+                  {/* Detailed Aged Analysis Section */}
+                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload Detailed Aged Analysis</h2>
+                    <DetailedAgedAnalysisUpload />
+                  </div>
+
+                  {/* Detailed Levied Upload Section */}
+                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload Detailed Levied</h2>
+                    <DetailedLeviedUpload />
+                  </div>
+                </div>
+              </div>
+            ) : currentView === 'customerdashboard' ? (
+              <CustomerDashboard onLogout={onLogout} />
+            ) : currentView === 'queries' ? (
+              <div className="h-full">
+                <QueryManagement />
+              </div>
+            ) : currentView === 'createAdmin' ? (
+              <div className="p-8">
+                <CreateAdminUser onClose={() => setCurrentView('dashboard')} />
+              </div>
+            ) : currentView === 'viewStatements' ? (
+              <ViewStatements />
+            ) : currentView === 'payment-reminder' ? (
+              <SuperPaymentReminder />
+            ) : (
+              // Dashboard View with new greeting and stats cards
+              <div className="flex flex-col items-center justify-center min-h-[80vh] p-8">
+                <div className="text-center mb-16">
+                  <h1 className="text-5xl md:text-7xl font-playfair mb-4 bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent animate-fade-in">
+                    {getGreeting()},
+                  </h1>
+                  <h2 className="text-4xl md:text-6xl font-playfair text-gray-800 dark:text-gray-200 animate-fade-in-delayed">
+                    Rofhiwa Mudau
+                  </h2>
+                  <p className="mt-8 text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-delayed leading-relaxed">
+                    Welcome to your super admin dashboard. Here you can manage reports, view analytics, and handle customer queries.
+                  </p>
+                </div>
+                
+                {/* Stats Cards Grid */}
+                <div className="w-full max-w-7xl animate-fade-in-delayed" style={{ animationDelay: '0.6s' }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                    {statsData.map((stat, index) => (
+                      <StatsCard
+                        key={index}
+                        title={stat.title}
+                        value={stat.value}
+                        change={stat.change}
+                        icon={stat.icon}
+                        iconBgColor={stat.iconBgColor}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Feature Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="relative">
+                      <FeatureCard
+                        title="Welcome back"
+                        value="Rofhiwa Mudau"
+                        icon={<MessageCircle className="w-5 h-5 text-blue-400" />}
+                        metric="Super Admin"
+                        description="Need assistance? Click here to chat with Zimako AI"
+                        onClick={() => setIsChatOpen(true)}
+                        bgGradient="linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(126, 34, 206, 0.2))"
+                        bgImage={jellyfishBg}
+                      />
+                    </div>
+                    <FeatureCard
+                      title="Query Resolution Rate"
+                      value="95"
+                      progressValue={95}
+                      trend={2.5}
+                      trendText="vs last period"
+                      description="Percentage of customer queries resolved successfully"
+                    />
+                    <FeatureCard
+                      title="Statement Distributions"
+                      value="12,847"
+                      metric="statements sent"
+                      progressValue={98}
+                      trend={5.3}
+                      trendText="this month"
+                      description="Total number of statements successfully distributed in December"
+                      icon={<FileText className="w-5 h-5 text-emerald-400" />}
+                    />
+                    <ActiveUsersCard />
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+
+      {/* ChatBot Modal */}
+      <ZimakoAIChatBot
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        userName="Rofhiwa Mudau"
+      />
+    </div>
+  );
+}

@@ -1,0 +1,199 @@
+/* Custom PrismJS Theme */
+:root {
+  --prism-background: #1a1b26;
+  --prism-comment: #565f89;
+  --prism-string: #9ece6a;
+  --prism-literal: #ff9e64;
+  --prism-keyword: #f7768e;
+  --prism-function: #7aa2f7;
+  --prism-deleted: #ff5555;
+  --prism-class: #bb9af7;
+  --prism-builtin: #73daca;
+  --prism-property: #7dcfff;
+  --prism-namespace: #ff9e64;
+  --prism-punctuation: #89ddff;
+  --prism-decorator: #bd93f9;
+  --prism-operator: #89ddff;
+  --prism-number: #ff9e64;
+  --prism-boolean: #ff9e64;
+  --prism-variable: #bb9af7;
+  --prism-regex: #7aa2f7;
+  --prism-json-property: #7dcfff;
+  --prism-line-number: #565f89;
+  --prism-line-number-gutter: #1a1b26;
+  --prism-line-highlight-background: #3b3d4f;
+  --prism-selection-background: #3b3d4f;
+}
+
+.dark {
+  --prism-foreground: #a9b1d6;
+  --prism-background: #1a1b26;
+}
+
+/* Code Block Styles */
+pre[class*='language-'] {
+  background: var(--prism-background);
+  color: var(--prism-foreground);
+  text-shadow: none;
+  border-radius: 0.5rem;
+  margin: 0;
+  padding: 1rem;
+  tab-size: 2;
+  hyphens: none;
+  word-break: normal;
+  word-wrap: normal;
+  font-size: 14px;
+  line-height: 1.6;
+  direction: ltr;
+  white-space: pre;
+  position: relative;
+}
+
+/* Line Numbers Container */
+pre[class*='language-'].line-numbers {
+  padding-left: 4.5rem;
+  counter-reset: linenumber;
+}
+
+pre[class*='language-'].line-numbers > code {
+  position: relative;
+  white-space: inherit;
+}
+
+/* Line Numbers */
+.line-numbers .line-numbers-rows {
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  left: -4.5rem;
+  width: 3.5rem;
+  font-size: 100%;
+  letter-spacing: -1px;
+  border-right: 1px solid #2e3440;
+  background: var(--prism-background);
+  user-select: none;
+  padding: 1rem 0;
+}
+
+.line-numbers-rows > span {
+  display: block;
+  counter-increment: linenumber;
+  padding-right: 1rem;
+  text-align: right;
+}
+
+.line-numbers-rows > span:before {
+  content: counter(linenumber);
+  color: var(--prism-line-number);
+  display: block;
+}
+
+/* Code Content */
+pre[class*='language-'] > code {
+  display: block;
+  padding: 0;
+}
+
+/* Token Colors */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--prism-comment);
+}
+
+.token.punctuation {
+  color: var(--prism-punctuation);
+}
+
+.token.property,
+.token.tag,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: var(--prism-property);
+}
+
+.token.boolean,
+.token.number {
+  color: var(--prism-boolean);
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: var(--prism-string);
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string,
+.token.variable {
+  color: var(--prism-operator);
+}
+
+.token.atrule,
+.token.attr-value,
+.token.function,
+.token.class-name {
+  color: var(--prism-function);
+}
+
+.token.keyword {
+  color: var(--prism-keyword);
+}
+
+.token.regex,
+.token.important {
+  color: var(--prism-regex);
+}
+
+/* Code Block Header */
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #2e3440;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  border-bottom: 1px solid #434c5e;
+}
+
+/* Copy Button Animation */
+.copy-button {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.code-block:hover .copy-button {
+  opacity: 1;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 640px) {
+  pre[class*='language-'] {
+    font-size: 13px;
+    padding: 0.75rem;
+  }
+
+  pre[class*='language-'].line-numbers {
+    padding-left: 3.8rem;
+  }
+
+  .line-numbers .line-numbers-rows {
+    left: -3.8rem;
+    width: 3rem;
+    font-size: 90%;
+  }
+}
+
+/* Collapsible Animation */
+.collapsible-content {
+  transition: max-height 0.3s ease-in-out;
+}

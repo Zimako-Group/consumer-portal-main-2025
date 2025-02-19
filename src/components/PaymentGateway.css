@@ -1,0 +1,110 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.modal-content {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  width: 70%;
+  max-width: 320px;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.modal-header h2 {
+  color: #2B6CB0;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.modal-body {
+  margin-bottom: 1rem;
+}
+
+.detail-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.detail-group label {
+  color: #4A5568;
+  font-weight: 500;
+}
+
+.detail-group .amount {
+  color: #2B6CB0;
+  font-weight: 600;
+}
+
+.info-text {
+  color: #4A5568;
+  font-size: 0.8rem;
+  text-align: center;
+  margin: 0.75rem 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.proceed-button,
+.cancel-button {
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.proceed-button {
+  background-color: #2B6CB0;
+  color: white;
+  border: none;
+}
+
+.proceed-button:hover {
+  background-color: #2C5282;
+}
+
+.cancel-button {
+  background-color: #EDF2F7;
+  color: #4A5568;
+  border: 1px solid #E2E8F0;
+}
+
+.cancel-button:hover {
+  background-color: #E2E8F0;
+}

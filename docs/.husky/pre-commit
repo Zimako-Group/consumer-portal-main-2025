@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+
+# Run the update-dates script
+node scripts/update-dates.js
+
+# If the script modified any files, add them to the commit
+git add src/data/docs.ts

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  .prose {
+    @apply text-gray-700 leading-7;
+  }
+  .prose h1 {
+    @apply text-4xl font-bold text-gray-900 mb-4;
+  }
+  .prose h2 {
+    @apply text-2xl font-semibold text-gray-900 mt-8 mb-4;
+  }
+  .prose p {
+    @apply mb-4;
+  }
+  .prose .lead {
+    @apply text-xl text-gray-600;
+  }
+  .prose a {
+    @apply text-indigo-600 hover:text-indigo-800 underline;
+  }
+  .prose ul {
+    @apply list-disc list-inside mb-4;
+  }
+}
