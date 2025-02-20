@@ -1,8 +1,10 @@
-import React from 'react';
-import { Calendar, DollarSign, Phone, Mail } from 'lucide-react';
+import React, { useCallback, memo } from 'react';
+import { Calendar, DollarSign, Phone, Mail, User, CreditCard, Bell, CheckCircle2, AlertCircle, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { logUserActivity } from '../utils/activity';
+import { motion, AnimatePresence } from 'framer-motion';
+import { format } from 'date-fns';
 
 interface UserAccountProps {
   userName: string;
@@ -22,7 +24,230 @@ interface UserAccountProps {
   }) => void;
 }
 
-export default function UserAccount({
+const InputField = memo(({ 
+  type, 
+  value, 
+  onChange, 
+  placeholder 
+}: { 
+  type: string; 
+  value: string; 
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; 
+  placeholder: string; 
+}) => (
+  <input
+    type={type}
+    value={value}
+    onChange={onChange}
+    placeholder={placeholder}
+    className="w-full px-3 py-2 bg-[#1E1E1E] border border-gray-700 text-white rounded-md focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+  />
+));
+
+const TabButton = memo(({ 
+  tab, 
+  icon: Icon, 
+  label, 
+  activeTab,
+  onClick 
+}: { 
+  tab: 'profile' | 'preferences';
+  icon: any;
+  label: string;
+  activeTab: string;
+  onClick: (tab: 'profile' | 'preferences') => void;
+}) => (
+  <button
+    onClick={() => onClick(tab)}
+    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+      activeTab === tab
+        ? 'bg-orange-500 text-white'
+        : 'text-gray-400 hover:text-white hover:bg-[#2A2A2A]'
+    }`}
+  >
+    <Icon size={20} />
+    <span>{label}</span>
+  </button>
+));
+
+const ProfileCard = memo(({ 
+  icon: Icon, 
+  label, 
+  value 
+}: { 
+  icon: any;
+  label: string;
+  value: string;
+}) => (
+  <div className="bg-[#1E1E1E] p-6 rounded-xl border border-gray-700">
+    <div className="flex items-center gap-3 mb-4">
+      <div className="bg-orange-500/10 p-2 rounded-lg">
+        <Icon className="text-orange-500" size={24} />
+      </div>
+      <h3 className="text-gray-400">{label}</h3>
+    </div>
+    <p className="text-xl text-white font-medium">{value}</p>
+  </div>
+));
+
+const NotificationsSection = memo(({ 
+  localPreferences,
+  isSaving,
+  handleToggle,
+  smsValue,
+  whatsappValue,
+  emailValue,
+  setSmsValue,
+  setWhatsappValue,
+  setEmailValue,
+  handleSavePreferences,
+  showSuccessAnimation
+}: {
+  localPreferences: any;
+  isSaving: boolean;
+  handleToggle: (type: 'sms' | 'whatsapp' | 'email', enabled: boolean) => void;
+  smsValue: string;
+  whatsappValue: string;
+  emailValue: string;
+  setSmsValue: (value: string) => void;
+  setWhatsappValue: (value: string) => void;
+  setEmailValue: (value: string) => void;
+  handleSavePreferences: () => void;
+  showSuccessAnimation: boolean;
+}) => (
+  <motion.div
+    key="preferences"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="space-y-6"
+  >
+    <div className="bg-[#1E1E1E] p-6 rounded-xl">
+      <h2 className="text-xl font-semibold text-white mb-4">Communication Preferences</h2>
+      <p className="text-gray-400 mb-6">Choose how you'd like to receive notifications about your account updates, payments, and important alerts.</p>
+      
+      <div className="space-y-6">
+        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-orange-500/10 p-2 rounded-lg">
+                <Phone className="text-orange-500" size={24} />
+              </div>
+              <div>
+                <h3 className="text-white font-medium">SMS Notifications</h3>
+                <p className="text-sm text-gray-400">Receive updates via text message</p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localPreferences.sms.enabled}
+                onChange={(e) => handleToggle('sms', e.target.checked)}
+                disabled={isSaving}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+            </label>
+          </div>
+          {localPreferences.sms.enabled && (
+            <InputField
+              type="tel"
+              value={smsValue}
+              onChange={(e) => setSmsValue(e.target.value)}
+              placeholder="Enter phone number"
+            />
+          )}
+        </div>
+
+        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-green-500/10 p-2 rounded-lg">
+                <MessageCircle className="text-green-500" size={24} />
+              </div>
+              <div>
+                <h3 className="text-white font-medium">WhatsApp Notifications</h3>
+                <p className="text-sm text-gray-400">Get instant updates via WhatsApp</p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localPreferences.whatsapp.enabled}
+                onChange={(e) => handleToggle('whatsapp', e.target.checked)}
+                disabled={isSaving}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+            </label>
+          </div>
+          {localPreferences.whatsapp.enabled && (
+            <InputField
+              type="tel"
+              value={whatsappValue}
+              onChange={(e) => setWhatsappValue(e.target.value)}
+              placeholder="Enter WhatsApp number"
+            />
+          )}
+        </div>
+
+        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-500/10 p-2 rounded-lg">
+                <Mail className="text-blue-500" size={24} />
+              </div>
+              <div>
+                <h3 className="text-white font-medium">Email Notifications</h3>
+                <p className="text-sm text-gray-400">Receive detailed updates via email</p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localPreferences.email.enabled}
+                onChange={(e) => handleToggle('email', e.target.checked)}
+                disabled={isSaving}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+            </label>
+          </div>
+          {localPreferences.email.enabled && (
+            <InputField
+              type="email"
+              value={emailValue}
+              onChange={(e) => setEmailValue(e.target.value)}
+              placeholder="Enter email address"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div className="flex justify-end mt-6">
+      <button
+        onClick={handleSavePreferences}
+        disabled={isSaving}
+        className="flex items-center gap-2 px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 focus:ring-4 focus:ring-orange-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isSaving ? (
+          <>
+            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+            <span>Saving...</span>
+          </>
+        ) : (
+          <>
+            {showSuccessAnimation ? <CheckCircle2 size={20} /> : null}
+            <span>Save Preferences</span>
+          </>
+        )}
+      </button>
+    </div>
+  </motion.div>
+));
+
+const UserAccount = memo(({
   userName,
   accountNumber,
   lastPaymentDate,
@@ -30,210 +255,113 @@ export default function UserAccount({
   accountType,
   preferences,
   onPreferencesSave
-}: UserAccountProps) {
+}: UserAccountProps) => {
   const { currentUser } = useAuth();
   const [localPreferences, setLocalPreferences] = React.useState(preferences);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<'profile' | 'preferences'>('profile');
+  const [showSuccessAnimation, setShowSuccessAnimation] = React.useState(false);
 
-  React.useEffect(() => {
-    setLocalPreferences(preferences);
-  }, [preferences]);
+  const [smsValue, setSmsValue] = React.useState(preferences.sms.value || '');
+  const [whatsappValue, setWhatsappValue] = React.useState(preferences.whatsapp.value || '');
+  const [emailValue, setEmailValue] = React.useState(preferences.email.value || '');
 
-  const handlePreferenceChange = (type: 'sms' | 'whatsapp' | 'email', field: 'enabled' | 'value', value: boolean | string) => {
+  const handleToggle = useCallback((type: 'sms' | 'whatsapp' | 'email', enabled: boolean) => {
     setLocalPreferences(prev => ({
       ...prev,
       [type]: {
         ...prev[type],
-        [field]: value
+        enabled
       }
     }));
-  };
+  }, []);
 
-  const validatePreferences = () => {
-    const validators = {
-      email: (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-      sms: (value: string) => /^\+?[\d\s-]{10,}$/.test(value),
-      whatsapp: (value: string) => /^\+?[\d\s-]{10,}$/.test(value)
-    };
+  const handleTabChange = useCallback((tab: 'profile' | 'preferences') => {
+    setActiveTab(tab);
+  }, []);
 
-    return Object.entries(localPreferences).every(([key, value]) => {
-      if (value.enabled) {
-        return validators[key as keyof typeof validators](value.value);
-      }
-      return true;
-    });
-  };
-
-  const getChangedPreferences = () => {
-    const changes: string[] = [];
-    if (localPreferences.sms.enabled !== preferences.sms.enabled || 
-        (localPreferences.sms.enabled && localPreferences.sms.value !== preferences.sms.value)) {
-      changes.push('SMS');
-    }
-    if (localPreferences.whatsapp.enabled !== preferences.whatsapp.enabled || 
-        (localPreferences.whatsapp.enabled && localPreferences.whatsapp.value !== preferences.whatsapp.value)) {
-      changes.push('WhatsApp');
-    }
-    if (localPreferences.email.enabled !== preferences.email.enabled || 
-        (localPreferences.email.enabled && localPreferences.email.value !== preferences.email.value)) {
-      changes.push('Email');
-    }
-    return changes;
-  };
-
-  const handleSavePreferences = async () => {
-    if (!currentUser) {
-      toast.error('Please log in to update preferences');
+  const handleSavePreferences = useCallback(async () => {
+    if (!currentUser || isSaving) {
+      toast.error('Please try again');
       return;
     }
 
-    if (!validatePreferences()) {
-      toast.error('Please check your input values. Email should be valid and phone numbers should be at least 10 digits.');
-      return;
-    }
-
-    setIsSaving(true);
     try {
-      await onPreferencesSave(localPreferences);
-      
-      const changedMethods = getChangedPreferences();
-      if (changedMethods.length > 0) {
-        await logUserActivity(
-          currentUser.uid,
-          'COMMUNICATION_UPDATE',
-          `Updated communication preferences: ${changedMethods.join(', ')}`,
-          {
-            smsEnabled: localPreferences.sms.enabled,
-            whatsappEnabled: localPreferences.whatsapp.enabled,
-            emailEnabled: localPreferences.email.enabled,
-            changedMethods
-          }
-        );
-      }
-      
-      toast.success('Communication preferences updated successfully');
+      setIsSaving(true);
+      const updatedPreferences = {
+        ...localPreferences,
+        sms: { ...localPreferences.sms, value: smsValue },
+        whatsapp: { ...localPreferences.whatsapp, value: whatsappValue },
+        email: { ...localPreferences.email, value: emailValue }
+      };
+      await onPreferencesSave(updatedPreferences);
+      setLocalPreferences(updatedPreferences);
+      toast.success('Preferences saved successfully');
+      setShowSuccessAnimation(true);
+      setTimeout(() => setShowSuccessAnimation(false), 2000);
     } catch (error) {
-      console.error('Error updating preferences:', error);
-      toast.error('Failed to update preferences. Please try again.');
+      console.error('Error saving preferences:', error);
+      toast.error('Failed to save preferences');
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [currentUser, isSaving, localPreferences, smsValue, whatsappValue, emailValue, onPreferencesSave]);
 
   return (
-    <div className="space-y-8">
-      <div className="bg-white dark:bg-dark-card rounded-lg shadow-sm p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">User Profile</h2>
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">Name:</span>
-            <span className="font-medium text-gray-900 dark:text-white">{userName}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">Account Number:</span>
-            <span className="font-medium text-gray-900 dark:text-white">{accountNumber}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">Account Type:</span>
-            <span className="font-medium text-gray-900 dark:text-white">{accountType}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">Last Payment Date:</span>
-            <span className="font-medium text-gray-900 dark:text-white">{lastPaymentDate}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 dark:text-gray-400">Last Amount Paid:</span>
-            <span className="font-medium text-gray-900 dark:text-white">R {lastAmountPaid}</span>
-          </div>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex space-x-4 mb-8">
+        <TabButton 
+          tab="profile" 
+          icon={User} 
+          label="Profile" 
+          activeTab={activeTab}
+          onClick={handleTabChange}
+        />
+        <TabButton 
+          tab="preferences" 
+          icon={Bell} 
+          label="Notifications" 
+          activeTab={activeTab}
+          onClick={handleTabChange}
+        />
       </div>
 
-      <div className="bg-white dark:bg-dark-card rounded-lg shadow-sm p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Select Preferred Communication Method(s)</h2>
-        <div className="space-y-6">
-          {/* SMS Preferences */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={localPreferences.sms.enabled}
-                  onChange={(e) => handlePreferenceChange('sms', 'enabled', e.target.checked)}
-                  className="w-4 h-4 text-theme border-gray-300 rounded focus:ring-theme"
-                />
-                <label className="text-gray-700 dark:text-gray-300">SMS Notifications</label>
-              </div>
-            </div>
-            {localPreferences.sms.enabled && (
-              <input
-                type="tel"
-                value={localPreferences.sms.value}
-                onChange={(e) => handlePreferenceChange('sms', 'value', e.target.value)}
-                placeholder="Enter phone number"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-dark-border rounded-md focus:ring-1 focus:ring-theme"
-              />
-            )}
-          </div>
-
-          {/* WhatsApp Preferences */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={localPreferences.whatsapp.enabled}
-                  onChange={(e) => handlePreferenceChange('whatsapp', 'enabled', e.target.checked)}
-                  className="w-4 h-4 text-theme border-gray-300 rounded focus:ring-theme"
-                />
-                <label className="text-gray-700 dark:text-gray-300">WhatsApp Notifications</label>
-              </div>
-            </div>
-            {localPreferences.whatsapp.enabled && (
-              <input
-                type="tel"
-                value={localPreferences.whatsapp.value}
-                onChange={(e) => handlePreferenceChange('whatsapp', 'value', e.target.value)}
-                placeholder="Enter WhatsApp number"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-dark-border rounded-md focus:ring-1 focus:ring-theme"
-              />
-            )}
-          </div>
-
-          {/* Email Preferences */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={localPreferences.email.enabled}
-                  onChange={(e) => handlePreferenceChange('email', 'enabled', e.target.checked)}
-                  className="w-4 h-4 text-theme border-gray-300 rounded focus:ring-theme"
-                />
-                <label className="text-gray-700 dark:text-gray-300">Email Notifications</label>
-              </div>
-            </div>
-            {localPreferences.email.enabled && (
-              <input
-                type="email"
-                value={localPreferences.email.value}
-                onChange={(e) => handlePreferenceChange('email', 'value', e.target.value)}
-                placeholder="Enter email address"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-dark-border rounded-md focus:ring-1 focus:ring-theme"
-              />
-            )}
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              onClick={handleSavePreferences}
-              disabled={isSaving}
-              className="px-4 py-2 bg-theme text-white rounded-md hover:bg-theme/90 focus:outline-none focus:ring-2 focus:ring-theme focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? 'Saving...' : 'Save Preferences'}
-            </button>
-          </div>
-        </div>
-      </div>
+      <AnimatePresence mode="wait">
+        {activeTab === 'profile' ? (
+          <motion.div
+            key="profile"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            <ProfileCard icon={User} label="Name" value={userName} />
+            <ProfileCard icon={CreditCard} label="Account Number" value={accountNumber} />
+            <ProfileCard icon={DollarSign} label="Account Type" value={accountType} />
+            <ProfileCard 
+              icon={Calendar} 
+              label="Last Payment" 
+              value={`${format(new Date(lastPaymentDate), 'PP')} - R${lastAmountPaid}`} 
+            />
+          </motion.div>
+        ) : (
+          <NotificationsSection 
+            localPreferences={localPreferences}
+            isSaving={isSaving}
+            handleToggle={handleToggle}
+            smsValue={smsValue}
+            whatsappValue={whatsappValue}
+            emailValue={emailValue}
+            setSmsValue={setSmsValue}
+            setWhatsappValue={setWhatsappValue}
+            setEmailValue={setEmailValue}
+            handleSavePreferences={handleSavePreferences}
+            showSuccessAnimation={showSuccessAnimation}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
-}
+});
+
+export default UserAccount;
