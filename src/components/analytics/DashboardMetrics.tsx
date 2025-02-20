@@ -4,6 +4,7 @@ import { format, subDays, subMonths, startOfDay, eachDayOfInterval, eachMonthOfI
 import { MetricCard } from '../metrics/MetricCard';
 import { useMetricsData } from '../metrics/useMetricsData';
 import { useCustomerStats } from '../../hooks/useCustomerStats';
+import { useCollectionRate } from '../../hooks/useCollectionRate';
 import { db } from '../../firebaseConfig';
 import { collection, onSnapshot, query, orderBy, limit, where, Timestamp } from 'firebase/firestore';
 import { UsersIcon, UserGroupIcon, BoltIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
@@ -151,6 +152,7 @@ const percentageFormatter = (number: number | undefined) =>
 export default function DashboardMetrics() {
   const metrics = useMetricsData();
   const { totalCustomers, activeCustomers, loading: statsLoading, error: statsError } = useCustomerStats();
+  const { rate: collectionRate, loading: rateLoading, error: rateError } = useCollectionRate();
   const [selectedRange, setSelectedRange] = useState('7d');
   const [combinedStats, setCombinedStats] = useState<CombinedStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -168,7 +170,6 @@ export default function DashboardMetrics() {
 
   // Calculate metrics for display
   const newUsersThisWeek = 0; // This will be implemented later
-  const collectionRate = 0; // This will be implemented later
 
   return (
     <div className="space-y-6">
@@ -205,10 +206,10 @@ export default function DashboardMetrics() {
           value={collectionRate}
           icon={<CurrencyDollarIcon className="h-6 w-6" />}
           trend={0}
-          loading={statsLoading}
-          error={statsError}
-          description="Average collection rate"
-          formatter={percentageFormatter}
+          loading={rateLoading}
+          error={rateError}
+          description={`Based on total paid vs outstanding amounts across all customers`}
+          formatter={(value) => `${value.toFixed(1)}%`}
         />
       </div>
 
@@ -271,16 +272,22 @@ export default function DashboardMetrics() {
                     }
                   }
                 },
+                stroke: {
+                  show: true,
+                  width: 2,
+                  colors: ['transparent']
+                },
                 plotOptions: {
                   bar: {
                     borderRadius: 6,
                     columnWidth: '60%',
+                    distributed: false,
                     rangeBarOverlap: true,
                     colors: {
                       ranges: [{
                         from: 0,
                         to: Infinity,
-                        color: '#3B82F6'
+                        color: undefined
                       }]
                     }
                   }
@@ -321,16 +328,19 @@ export default function DashboardMetrics() {
                 theme: {
                   mode: 'light',
                   palette: 'palette1'
-                }
+                },
+                colors: ['#3B82F6', '#10B981'] // Blue for accounts, Green for statements
               }}
               series={[
                 {
                   name: 'Accounts',
-                  data: combinedStats.map(stat => stat.accounts)
+                  data: combinedStats.map(stat => stat.accounts),
+                  color: '#3B82F6' // Blue
                 },
                 {
                   name: 'Statements',
-                  data: combinedStats.map(stat => stat.statements)
+                  data: combinedStats.map(stat => stat.statements),
+                  color: '#10B981' // Green
                 }
               ]}
               type="bar"
