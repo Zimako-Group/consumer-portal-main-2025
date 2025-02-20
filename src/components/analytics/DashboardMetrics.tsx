@@ -6,6 +6,7 @@ import { useMetricsData } from '../metrics/useMetricsData';
 import { useCustomerStats } from '../../hooks/useCustomerStats';
 import { db } from '../../firebaseConfig';
 import { collection, onSnapshot, query, orderBy, limit, where, Timestamp } from 'firebase/firestore';
+import { UsersIcon, UserGroupIcon, BoltIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 
 interface CombinedStats {
   accounts: number;
@@ -149,7 +150,7 @@ const percentageFormatter = (number: number | undefined) =>
 
 export default function DashboardMetrics() {
   const metrics = useMetricsData();
-  const customerStats = useCustomerStats();
+  const { totalCustomers, activeCustomers, loading: statsLoading, error: statsError } = useCustomerStats();
   const [selectedRange, setSelectedRange] = useState('7d');
   const [combinedStats, setCombinedStats] = useState<CombinedStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,240 +164,179 @@ export default function DashboardMetrics() {
       setCombinedStats(dummyData);
       setIsLoading(false);
     }, 500);
-
-    // Comment out the Firebase listener for now
-    // const selectedTimeRange = timeRanges.find(r => r.key === selectedRange)?.days || 7;
-    // const startDate = startOfDay(
-    //   selectedRange.includes('m') 
-    //     ? subMonths(new Date(), parseInt(selectedRange))
-    //     : subDays(new Date(), selectedTimeRange)
-    // );
-
-    // const statsRef = collection(db, 'statistics');
-    // const statsQuery = query(
-    //   statsRef,
-    //   where('timestamp', '>=', Timestamp.fromDate(startDate)),
-    //   orderBy('timestamp', 'desc'),
-    //   limit(selectedTimeRange)
-    // );
-
-    // const unsubscribe = onSnapshot(statsQuery, (snapshot) => {
-    //   const newStats = snapshot.docs.map(doc => {
-    //     const data = doc.data();
-    //     return {
-    //       accounts: data.accounts || 0,
-    //       bookValue: data.bookValue || 0,
-    //       statements: data.statements || 0,
-    //       readings: data.readings || 0,
-    //       date: format(data.timestamp.toDate(), selectedTimeRange <= 30 ? 'dd MMM' : 'MMM yyyy'),
-    //       timestamp: data.timestamp
-    //     };
-    //   });
-    //   setCombinedStats(newStats.reverse());
-    //   setIsLoading(false);
-    // }, (error) => {
-    //   console.error('Error fetching stats:', error);
-    //   setIsLoading(false);
-    // });
-
-    // return () => unsubscribe();
   }, [selectedRange]);
 
-  const isDarkMode = document.documentElement.classList.contains('dark');
-
-  const barChartOptions = {
-    chart: {
-      type: 'bar',
-      height: 350,
-      background: 'transparent',
-      foreColor: isDarkMode ? '#fff' : '#373d3f',
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: '55%',
-        borderRadius: 5,
-      },
-    },
-    dataLabels: {
-      enabled: false, // Disable the data labels on bars
-    },
-    grid: {
-      show: true,
-      borderColor: isDarkMode ? '#2d3748' : '#e2e8f0',
-      strokeDashArray: 5,
-      position: 'back',
-    },
-    stroke: {
-      show: true,
-      width: 2,
-      colors: ['transparent']
-    },
-    xaxis: {
-      categories: combinedStats.map((data) => data.date),
-      labels: {
-        style: {
-          colors: isDarkMode ? '#fff' : '#373d3f',
-          fontSize: '12px',
-        },
-      },
-      axisBorder: {
-        color: isDarkMode ? '#2d3748' : '#e2e8f0',
-      },
-      axisTicks: {
-        color: isDarkMode ? '#2d3748' : '#e2e8f0',
-      },
-    },
-    yaxis: [
-      {
-        title: {
-          text: 'Number of Items',
-          style: {
-            color: isDarkMode ? '#fff' : '#373d3f',
-          },
-        },
-        labels: {
-          style: {
-            colors: isDarkMode ? '#fff' : '#373d3f',
-          },
-          formatter: function(val: number) {
-            return val >= 1000 ? `${(val/1000).toFixed(1)}K` : val.toString();
-          },
-        },
-      },
-      {
-        opposite: true,
-        title: {
-          text: 'Book Value (R)',
-          style: {
-            color: isDarkMode ? '#fff' : '#373d3f',
-          },
-        },
-        labels: {
-          style: {
-            colors: isDarkMode ? '#fff' : '#373d3f',
-          },
-          formatter: function(val: number) {
-            return `R${(val/1000).toFixed(1)}K`;
-          },
-        },
-      }
-    ],
-    tooltip: {
-      enabled: true,
-      theme: isDarkMode ? 'dark' : 'light',
-      shared: true,
-      intersect: false,
-      y: {
-        formatter: function(val: number, opts: any) {
-          const seriesName = opts.w.globals.seriesNames[opts.seriesIndex];
-          if (seriesName === 'Book Value') {
-            return `R${(val/1000).toFixed(1)}K`;
-          }
-          return val >= 1000 ? `${(val/1000).toFixed(1)}K` : val.toString();
-        }
-      },
-      style: {
-        fontSize: '12px',
-      },
-    },
-    legend: {
-      labels: {
-        colors: isDarkMode ? '#fff' : '#373d3f',
-      },
-    },
-    colors: ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6'], // Blue, Green, Orange, Purple
-  };
-
-  const barChartSeries = [
-    {
-      name: 'Accounts',
-      type: 'column',
-      data: combinedStats.map((data) => data.accounts),
-    },
-    {
-      name: 'Book Value',
-      type: 'column',
-      data: combinedStats.map((data) => data.bookValue),
-    },
-    {
-      name: 'Statements',
-      type: 'column',
-      data: combinedStats.map((data) => data.statements),
-    },
-    {
-      name: 'Meter Readings',
-      type: 'column',
-      data: combinedStats.map((data) => data.readings),
-    },
-  ];
+  // Calculate metrics for display
+  const newUsersThisWeek = 0; // This will be implemented later
+  const collectionRate = 0; // This will be implemented later
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="New Users This Week"
-          value={metrics.newUsers || 0}
-          subtitle="Resets every Sunday at 00:00 SAST"
-          loading={metrics.loading}
+          value={newUsersThisWeek}
+          icon={<UsersIcon className="h-6 w-6" />}
+          trend={0}
+          loading={statsLoading}
+          error={statsError}
+          description="Resets every Sunday at 00:00 SAST"
         />
         <MetricCard
           title="Total Customers"
-          value={customerStats.totalCustomers || 0}
-          subtitle="Total registered customers"
-          loading={customerStats.loading}
-          error={customerStats.error}
+          value={totalCustomers}
+          icon={<UserGroupIcon className="h-6 w-6" />}
+          trend={0}
+          loading={statsLoading}
+          error={statsError}
+          description="Total registered customers"
         />
         <MetricCard
           title="Active Services"
-          value={customerStats.activeCustomers || 0}
-          subtitle="Customers with active accounts"
-          loading={customerStats.loading}
-          error={customerStats.error}
+          value={activeCustomers}
+          icon={<BoltIcon className="h-6 w-6" />}
+          trend={0}
+          loading={statsLoading}
+          error={statsError}
+          description="Customers with active accounts"
         />
         <MetricCard
           title="Collection Rate"
-          value={metrics.collectionRate || 0}
-          subtitle="Average collection rate"
-          valueFormatter={percentageFormatter}
-          loading={metrics.loading}
+          value={collectionRate}
+          icon={<CurrencyDollarIcon className="h-6 w-6" />}
+          trend={0}
+          loading={statsLoading}
+          error={statsError}
+          description="Average collection rate"
+          formatter={percentageFormatter}
         />
       </div>
 
-      <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Combined Statistics
-              {isLoading && (
-                <span className="ml-2 text-sm font-normal text-gray-500">Loading...</span>
-              )}
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {timeRanges.map((range) => (
-                <button
-                  key={range.key}
-                  onClick={() => setSelectedRange(range.key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
-                    selectedRange === range.key
-                      ? 'bg-blue-500 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Combined Statistics
+          </h3>
+          <div className="flex items-center space-x-2">
+            {timeRanges.map((range) => (
+              <button
+                key={range.key}
+                onClick={() => setSelectedRange(range.key)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors
+                  ${selectedRange === range.key
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
-                >
-                  {range.label}
-                </button>
-              ))}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-[400px] w-full">
+          {isLoading ? (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
-          </div>
-          
-          <div className={`transition-opacity duration-300 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
-            <ApexCharts 
-              options={barChartOptions} 
-              series={barChartSeries} 
-              type="bar" 
-              height={400} 
+          ) : (
+            <ApexCharts
+              options={{
+                chart: {
+                  type: 'bar',
+                  height: 400,
+                  fontFamily: 'Inter, sans-serif',
+                  toolbar: {
+                    show: true,
+                    tools: {
+                      download: true,
+                      selection: false,
+                      zoom: false,
+                      zoomin: false,
+                      zoomout: false,
+                      pan: false,
+                    }
+                  },
+                  animations: {
+                    enabled: true,
+                    easing: 'easeinout',
+                    speed: 800,
+                    animateGradually: {
+                      enabled: true,
+                      delay: 150
+                    },
+                    dynamicAnimation: {
+                      enabled: true,
+                      speed: 350
+                    }
+                  }
+                },
+                plotOptions: {
+                  bar: {
+                    borderRadius: 6,
+                    columnWidth: '60%',
+                    rangeBarOverlap: true,
+                    colors: {
+                      ranges: [{
+                        from: 0,
+                        to: Infinity,
+                        color: '#3B82F6'
+                      }]
+                    }
+                  }
+                },
+                grid: {
+                  show: true,
+                  borderColor: '#E5E7EB',
+                  strokeDashArray: 4,
+                  position: 'back'
+                },
+                dataLabels: {
+                  enabled: false
+                },
+                xaxis: {
+                  categories: combinedStats.map(stat => stat.date),
+                  labels: {
+                    style: {
+                      colors: '#6B7280',
+                      fontSize: '12px'
+                    }
+                  },
+                  axisBorder: {
+                    show: false
+                  },
+                  axisTicks: {
+                    show: false
+                  }
+                },
+                yaxis: {
+                  labels: {
+                    style: {
+                      colors: '#6B7280',
+                      fontSize: '12px'
+                    },
+                    formatter: (value: number) => Intl.NumberFormat('en-ZA').format(value)
+                  }
+                },
+                theme: {
+                  mode: 'light',
+                  palette: 'palette1'
+                }
+              }}
+              series={[
+                {
+                  name: 'Accounts',
+                  data: combinedStats.map(stat => stat.accounts)
+                },
+                {
+                  name: 'Statements',
+                  data: combinedStats.map(stat => stat.statements)
+                }
+              ]}
+              type="bar"
+              height={400}
             />
-          </div>
+          )}
         </div>
       </div>
     </div>
