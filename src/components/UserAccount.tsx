@@ -341,7 +341,7 @@ const UserAccount = memo(({
             <ProfileCard 
               icon={Calendar} 
               label="Last Payment" 
-              value={`${format(new Date(lastPaymentDate), 'PP')} - R${lastAmountPaid}`} 
+              value={`R${lastAmountPaid}`} 
             />
           </motion.div>
         ) : (
