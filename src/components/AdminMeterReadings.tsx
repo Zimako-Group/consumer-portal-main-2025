@@ -144,11 +144,43 @@ export default function AdminMeterReadings() {
   const chartData = useMemo(() => {
     if (!data.length) return null;
 
-    const sortedData = [...data].sort((a, b) => {
-      const dateA = a.currentReadingDate instanceof Date ? a.currentReadingDate : new Date(a.currentReadingDate);
-      const dateB = b.currentReadingDate instanceof Date ? b.currentReadingDate : new Date(b.currentReadingDate);
-      return dateA.getTime() - dateB.getTime();
-    });
+    // Safe date parsing function
+    const parseDate = (dateInput: any) => {
+      try {
+        if (!dateInput) return null;
+        
+        // Handle Firestore Timestamp
+        if (dateInput?.toDate instanceof Function) {
+          return dateInput.toDate();
+        }
+        
+        // Handle Date object
+        if (dateInput instanceof Date) {
+          return dateInput;
+        }
+        
+        // Handle string date
+        if (typeof dateInput === 'string') {
+          const parsedDate = new Date(dateInput);
+          return !isNaN(parsedDate.getTime()) ? parsedDate : null;
+        }
+        
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Filter and sort valid data entries
+    const validData = data
+      .filter(reading => parseDate(reading.currentReadingDate) !== null)
+      .sort((a, b) => {
+        const dateA = parseDate(a.currentReadingDate)!;
+        const dateB = parseDate(b.currentReadingDate)!;
+        return dateA.getTime() - dateB.getTime();
+      });
+
+    if (!validData.length) return null;
 
     return {
       options: {
@@ -183,11 +215,9 @@ export default function AdminMeterReadings() {
         },
         colors: ['#2563eb'],
         xaxis: {
-          categories: sortedData.map(reading => {
-            const date = reading.currentReadingDate instanceof Date 
-              ? reading.currentReadingDate 
-              : new Date(reading.currentReadingDate);
-            return format(date, 'dd/MM/yyyy');
+          categories: validData.map(reading => {
+            const date = parseDate(reading.currentReadingDate);
+            return date ? format(date, 'dd/MM/yyyy') : 'Invalid Date';
           }),
           labels: {
             style: {
@@ -204,7 +234,7 @@ export default function AdminMeterReadings() {
           axisTicks: {
             show: false
           },
-          tickAmount: Math.min(sortedData.length, 10) // Show at most 10 ticks
+          tickAmount: Math.min(validData.length, 10)
         },
         yaxis: {
           labels: {
@@ -244,7 +274,7 @@ export default function AdminMeterReadings() {
       },
       series: [{
         name: 'Consumption',
-        data: sortedData.map(reading => reading.consumption)
+        data: validData.map(reading => reading.consumption)
       }]
     };
   }, [data, isDarkMode]);
