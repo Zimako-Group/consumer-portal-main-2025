@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { format, subMonths } from 'date-fns';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line
-} from 'recharts';
+import ReactApexChart from 'react-apexcharts';
+import { ApexOptions } from 'apexcharts';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import {
@@ -242,52 +240,118 @@ const AdminReports: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Communication Trends */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-4">Communication Trends</h3>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Communication Trends</h2>
             <div className="h-[300px]">
-              <ResponsiveContainer>
-                <LineChart data={stats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="month" 
-                    tickFormatter={(value) => format(new Date(value), 'MMM')}
-                  />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="sms" stroke={COLORS.blue} />
-                  <Line type="monotone" dataKey="email" stroke={COLORS.green} />
-                  <Line type="monotone" dataKey="whatsapp" stroke={COLORS.purple} />
-                </LineChart>
-              </ResponsiveContainer>
+              <ReactApexChart
+                options={{
+                  chart: {
+                    type: 'line',
+                    toolbar: {
+                      show: true
+                    },
+                    background: 'transparent'
+                  },
+                  stroke: {
+                    curve: 'smooth',
+                    width: 3
+                  },
+                  dataLabels: {
+                    enabled: false
+                  },
+                  xaxis: {
+                    categories: stats.map(stat => format(new Date(stat.month), 'MMM')),
+                    labels: {
+                      style: {
+                        colors: '#718096'
+                      }
+                    }
+                  },
+                  yaxis: {
+                    title: {
+                      text: 'Messages',
+                      style: {
+                        color: '#718096'
+                      }
+                    },
+                    labels: {
+                      style: {
+                        colors: '#718096'
+                      }
+                    }
+                  },
+                  colors: [COLORS.blue, COLORS.green, COLORS.purple],
+                  tooltip: {
+                    y: {
+                      formatter: (value) => value.toLocaleString()
+                    }
+                  },
+                  legend: {
+                    position: 'bottom',
+                    labels: {
+                      colors: '#718096'
+                    }
+                  },
+                  theme: {
+                    mode: 'dark'
+                  }
+                }}
+                series={[
+                  {
+                    name: 'SMS',
+                    data: stats.map(stat => stat.sms)
+                  },
+                  {
+                    name: 'Email',
+                    data: stats.map(stat => stat.email)
+                  },
+                  {
+                    name: 'WhatsApp',
+                    data: stats.map(stat => stat.whatsapp)
+                  }
+                ]}
+                type="line"
+                height="100%"
+              />
             </div>
           </div>
 
           {/* Query Distribution */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-4">Query Distribution</h3>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Query Distribution</h2>
             <div className="h-[300px]">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Billing', value: latestStats.billingQueries },
-                      { name: 'Payments', value: latestStats.paymentArrangements }
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    <Cell fill={COLORS.yellow} />
-                    <Cell fill={COLORS.indigo} />
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              <ReactApexChart
+                options={{
+                  chart: {
+                    type: 'donut',
+                    background: 'transparent'
+                  },
+                  labels: ['Billing Queries', 'Payment Arrangements'],
+                  colors: [COLORS.yellow, COLORS.indigo],
+                  legend: {
+                    position: 'bottom',
+                    labels: {
+                      colors: '#718096'
+                    }
+                  },
+                  dataLabels: {
+                    enabled: true
+                  },
+                  tooltip: {
+                    y: {
+                      formatter: (value) => value.toLocaleString()
+                    }
+                  },
+                  theme: {
+                    mode: 'dark'
+                  }
+                }}
+                series={[
+                  getLatestStats().billingQueries,
+                  getLatestStats().paymentArrangements
+                ]}
+                type="donut"
+                height="100%"
+              />
             </div>
           </div>
         </div>
@@ -296,6 +360,83 @@ const AdminReports: React.FC = () => {
   };
 
   const renderCommunicationsTab = () => {
+    const communicationChartOptions: ApexOptions = {
+      chart: {
+        type: 'bar',
+        stacked: false,
+        toolbar: {
+          show: true
+        },
+        background: 'transparent'
+      },
+      plotOptions: {
+        bar: {
+          horizontal: false,
+          columnWidth: '55%',
+          borderRadius: 4
+        }
+      },
+      dataLabels: {
+        enabled: false
+      },
+      stroke: {
+        show: true,
+        width: 2,
+        colors: ['transparent']
+      },
+      xaxis: {
+        categories: stats.map(stat => format(new Date(stat.month), 'MMM yyyy')),
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      yaxis: {
+        title: {
+          text: 'Messages',
+          style: {
+            color: '#718096'
+          }
+        },
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      colors: [COLORS.blue, COLORS.green, COLORS.purple],
+      tooltip: {
+        y: {
+          formatter: (value) => value.toLocaleString()
+        }
+      },
+      legend: {
+        position: 'bottom',
+        labels: {
+          colors: '#718096'
+        }
+      },
+      theme: {
+        mode: 'dark'
+      }
+    };
+
+    const communicationChartSeries = [
+      {
+        name: 'SMS',
+        data: stats.map(stat => stat.sms)
+      },
+      {
+        name: 'Email',
+        data: stats.map(stat => stat.email)
+      },
+      {
+        name: 'WhatsApp',
+        data: stats.map(stat => stat.whatsapp)
+      }
+    ];
+
     return (
       <div className="space-y-6">
         {/* Communication Stats Cards */}
@@ -322,32 +463,20 @@ const AdminReports: React.FC = () => {
 
         {/* Communication Channels Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Communication Channel Usage</h3>
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Communication Channel Usage</h2>
           <div className="h-[400px]">
-            <ResponsiveContainer>
-              <BarChart data={stats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="month" 
-                  tickFormatter={(value) => format(new Date(value), 'MMM yyyy')}
-                />
-                <YAxis />
-                <Tooltip 
-                  labelFormatter={(value) => format(new Date(value), 'MMMM yyyy')}
-                  formatter={(value: number) => [value.toLocaleString(), 'Messages']}
-                />
-                <Legend />
-                <Bar dataKey="sms" name="SMS" fill={COLORS.blue} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="email" name="Email" fill={COLORS.green} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.purple} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ReactApexChart
+              options={communicationChartOptions}
+              series={communicationChartSeries}
+              type="bar"
+              height="100%"
+            />
           </div>
         </div>
 
         {/* Monthly Comparison */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Monthly Communication Comparison</h3>
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Monthly Communication Comparison</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
@@ -388,6 +517,101 @@ const AdminReports: React.FC = () => {
   };
 
   const renderQueriesTab = () => {
+    const queryTrendsOptions: ApexOptions = {
+      chart: {
+        type: 'line',
+        toolbar: {
+          show: true
+        },
+        background: 'transparent'
+      },
+      stroke: {
+        curve: 'smooth',
+        width: 3
+      },
+      dataLabels: {
+        enabled: false
+      },
+      xaxis: {
+        categories: stats.map(stat => format(new Date(stat.month), 'MMM yyyy')),
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      yaxis: {
+        title: {
+          text: 'Queries',
+          style: {
+            color: '#718096'
+          }
+        },
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      colors: [COLORS.yellow, COLORS.indigo],
+      tooltip: {
+        y: {
+          formatter: (value) => value.toLocaleString()
+        }
+      },
+      legend: {
+        position: 'bottom',
+        labels: {
+          colors: '#718096'
+        }
+      },
+      theme: {
+        mode: 'dark'
+      }
+    };
+
+    const queryTrendsSeries = [
+      {
+        name: 'Billing Queries',
+        data: stats.map(stat => stat.billingQueries)
+      },
+      {
+        name: 'Payment Arrangements',
+        data: stats.map(stat => stat.paymentArrangements)
+      }
+    ];
+
+    const queryDistributionOptions: ApexOptions = {
+      chart: {
+        type: 'donut',
+        background: 'transparent'
+      },
+      labels: ['Billing Queries', 'Payment Arrangements'],
+      colors: [COLORS.yellow, COLORS.indigo],
+      legend: {
+        position: 'bottom',
+        labels: {
+          colors: '#718096'
+        }
+      },
+      dataLabels: {
+        enabled: true
+      },
+      tooltip: {
+        y: {
+          formatter: (value) => value.toLocaleString()
+        }
+      },
+      theme: {
+        mode: 'dark'
+      }
+    };
+
+    const queryDistributionSeries = [
+      getLatestStats().billingQueries,
+      getLatestStats().paymentArrangements
+    ];
+
     return (
       <div className="space-y-6">
         {/* Query Stats Cards */}
@@ -408,78 +632,33 @@ const AdminReports: React.FC = () => {
 
         {/* Query Trends Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Query Trends Over Time</h3>
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Query Trends Over Time</h2>
           <div className="h-[400px]">
-            <ResponsiveContainer>
-              <LineChart data={stats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="month" 
-                  tickFormatter={(value) => format(new Date(value), 'MMM yyyy')}
-                />
-                <YAxis />
-                <Tooltip 
-                  labelFormatter={(value) => format(new Date(value), 'MMMM yyyy')}
-                  formatter={(value: number) => [value.toLocaleString(), 'Queries']}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="billingQueries" 
-                  name="Billing Queries" 
-                  stroke={COLORS.yellow} 
-                  strokeWidth={2}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="paymentArrangements" 
-                  name="Payment Arrangements" 
-                  stroke={COLORS.indigo}
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <ReactApexChart
+              options={queryTrendsOptions}
+              series={queryTrendsSeries}
+              type="line"
+              height="100%"
+            />
           </div>
         </div>
 
         {/* Query Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-4">Query Distribution</h3>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Query Distribution</h2>
             <div className="h-[300px]">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { 
-                        name: 'Billing Queries', 
-                        value: getLatestStats().billingQueries 
-                      },
-                      { 
-                        name: 'Payment Arrangements', 
-                        value: getLatestStats().paymentArrangements 
-                      }
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    <Cell fill={COLORS.yellow} />
-                    <Cell fill={COLORS.indigo} />
-                  </Pie>
-                  <Tooltip formatter={(value: number) => value.toLocaleString()} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              <ReactApexChart
+                options={queryDistributionOptions}
+                series={queryDistributionSeries}
+                type="donut"
+                height="100%"
+              />
             </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold mb-4">Monthly Query Summary</h3>
+            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Monthly Query Summary</h2>
             <div className="overflow-y-auto max-h-[300px]">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead>
@@ -517,6 +696,79 @@ const AdminReports: React.FC = () => {
   };
 
   const renderUsageTab = () => {
+    const usageChartOptions: ApexOptions = {
+      chart: {
+        type: 'bar',
+        stacked: false,
+        toolbar: {
+          show: true
+        },
+        background: 'transparent'
+      },
+      plotOptions: {
+        bar: {
+          horizontal: false,
+          columnWidth: '55%',
+          borderRadius: 4
+        }
+      },
+      dataLabels: {
+        enabled: false
+      },
+      stroke: {
+        show: true,
+        width: 2,
+        colors: ['transparent']
+      },
+      xaxis: {
+        categories: stats.map(stat => format(new Date(stat.month), 'MMM yyyy')),
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      yaxis: {
+        title: {
+          text: 'Activities',
+          style: {
+            color: '#718096'
+          }
+        },
+        labels: {
+          style: {
+            colors: '#718096'
+          }
+        }
+      },
+      colors: [COLORS.pink, COLORS.blue],
+      tooltip: {
+        y: {
+          formatter: (value) => value.toLocaleString()
+        }
+      },
+      legend: {
+        position: 'bottom',
+        labels: {
+          colors: '#718096'
+        }
+      },
+      theme: {
+        mode: 'dark'
+      }
+    };
+
+    const usageChartSeries = [
+      {
+        name: 'Statement Downloads',
+        data: stats.map(stat => stat.statementDownloads)
+      },
+      {
+        name: 'Meter Readings',
+        data: stats.map(stat => stat.meterReadings)
+      }
+    ];
+
     return (
       <div className="space-y-6">
         {/* Usage Stats Cards */}
@@ -537,41 +789,20 @@ const AdminReports: React.FC = () => {
 
         {/* Usage Trends Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Usage Activity Trends</h3>
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Usage Activity Trends</h2>
           <div className="h-[400px]">
-            <ResponsiveContainer>
-              <BarChart data={stats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="month" 
-                  tickFormatter={(value) => format(new Date(value), 'MMM yyyy')}
-                />
-                <YAxis />
-                <Tooltip 
-                  labelFormatter={(value) => format(new Date(value), 'MMMM yyyy')}
-                  formatter={(value: number) => [value.toLocaleString(), 'Activities']}
-                />
-                <Legend />
-                <Bar 
-                  dataKey="statementDownloads" 
-                  name="Statement Downloads" 
-                  fill={COLORS.pink}
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar 
-                  dataKey="meterReadings" 
-                  name="Meter Readings" 
-                  fill={COLORS.blue}
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <ReactApexChart
+              options={usageChartOptions}
+              series={usageChartSeries}
+              type="bar"
+              height="100%"
+            />
           </div>
         </div>
 
         {/* Monthly Usage Table */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Monthly Usage Statistics</h3>
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Monthly Usage Statistics</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
