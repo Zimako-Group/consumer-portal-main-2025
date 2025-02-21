@@ -33,7 +33,7 @@ export interface CommunicationRecord {
 }
 
 // Helper function to update communication stats
-const updateCommunicationStats = async (type: 'sms' | 'email' | 'whatsapp') => {
+export const updateCommunicationStats = async (type: 'sms' | 'email' | 'whatsapp') => {
   try {
     const currentMonth = format(new Date(), 'yyyy-MM');
     const statsRef = doc(db, 'communicationStats', currentMonth);

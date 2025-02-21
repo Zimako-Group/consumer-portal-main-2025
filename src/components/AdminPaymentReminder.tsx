@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Mail, MessageSquare, Phone, Info, Plus } from 'lucide-react';
+import { Send, Mail, MessageSquare, Phone, Info, Plus, Loader2 } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { format } from 'date-fns';
 import SuperPaymentReminder from './SuperPaymentReminder';
+import { sendSMSAndRecord, sendEmailAndRecord, updateCommunicationStats } from '../services/communicationService';
+import toast from 'react-hot-toast';
 
 interface Customer {
   id: string;
@@ -27,28 +29,22 @@ function AdminPaymentReminder() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage] = useState(10);
+  const [sendingMessages, setSendingMessages] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  const sendPaymentReminderSMS = async (phoneNumber: string, customerName: string, amount: number, customerId: string) => {
+  const sendPaymentReminderSMS = async (phoneNumber: string, customerName: string, amount: number, accountNumber: string) => {
     try {
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: phoneNumber,
-          message: `Dear ${customerName}, this is a reminder that you have an outstanding balance of R${amount.toLocaleString()} on your Mohokare Municipality account. Please make payment as soon as possible to avoid service interruption.`
-        }),
-      });
+      const message = `Dear ${customerName}, this is a reminder that you have an outstanding balance of R${amount.toLocaleString()} on your Mohokare Municipality account. Please make payment as soon as possible to avoid service interruption.`;
       
-      const data = await response.json();
+      await sendSMSAndRecord(
+        phoneNumber,
+        message,
+        accountNumber,
+        'System Admin'
+      );
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send SMS');
-      }
-
-      // Increment SMS stats
-      await incrementCommunicationStat(customerId, 'sms');
+      // Update communication stats for reporting
+      await updateCommunicationStats('sms');
       
       return true;
     } catch (error) {
@@ -57,59 +53,35 @@ function AdminPaymentReminder() {
     }
   };
 
-  const sendPaymentReminderEmail = async (email: string, customerName: string, amount: number, customerId: string) => {
+  const sendPaymentReminderEmail = async (email: string, customerName: string, amount: number, accountNumber: string) => {
     try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: email,
-          subject: 'Payment Reminder - Mohokare Municipality',
-          html: `
-            <h2>Payment Reminder</h2>
-            <p>Dear ${customerName},</p>
-            <p>This is a friendly reminder that you have an outstanding balance of <strong>R${amount.toLocaleString()}</strong> on your Mohokare Municipality account.</p>
-            <p>Please make payment as soon as possible to avoid any service interruption.</p>
-            <p>If you have already made the payment, please disregard this message.</p>
-            <br>
-            <p>Best regards,</p>
-            <p>Mohokare Municipality</p>
-          `
-        }),
-      });
+      const subject = 'Payment Reminder - Mohokare Municipality';
+      const message = `
+        <h2>Payment Reminder</h2>
+        <p>Dear ${customerName},</p>
+        <p>This is a friendly reminder that you have an outstanding balance of <strong>R${amount.toLocaleString()}</strong> on your Mohokare Municipality account.</p>
+        <p>Please make payment as soon as possible to avoid any service interruption.</p>
+        <p>If you have already made the payment, please disregard this message.</p>
+        <br>
+        <p>Best regards,</p>
+        <p>Mohokare Municipality</p>
+      `;
       
-      if (!response.ok) {
-        throw new Error('Failed to send email');
-      }
-
-      // Increment email stats
-      await incrementCommunicationStat(customerId, 'email');
+      await sendEmailAndRecord(
+        email,
+        subject,
+        message,
+        accountNumber,
+        'System Admin'
+      );
+      
+      // Update communication stats for reporting
+      await updateCommunicationStats('email');
       
       return true;
     } catch (error) {
       console.error('Error sending email:', error);
       throw error;
-    }
-  };
-
-  const incrementCommunicationStat = async (customerId: string, method: 'sms' | 'email' | 'whatsapp') => {
-    try {
-      const customerRef = doc(db, 'customers', customerId);
-      const customerData = await getDocs(query(customerRef));
-      const customer = customerData.docs[0].data() as Customer;
-
-      const newStats = {
-        ...customer.communicationStats,
-        [method]: (customer.communicationStats?.[method] || 0) + 1,
-      };
-
-      await updateDoc(customerRef, {
-        communicationStats: newStats,
-      });
-    } catch (error) {
-      console.error('Error incrementing communication stat:', error);
     }
   };
 
@@ -160,62 +132,87 @@ function AdminPaymentReminder() {
     fetchCustomers();
   }, []);
 
-  const handleSingleAction = async (customer: Customer, method: 'sms' | 'email' | 'whatsapp') => {
+  const handleSingleAction = async (customer: Customer, method: 'sms' | 'email') => {
     try {
+      setSendingMessages(true);
+      
       if (method === 'sms' && customer.phoneNumber) {
         await sendPaymentReminderSMS(
           customer.phoneNumber,
           customer.fullName,
           customer.outstandingTotalBalance,
-          customer.id
+          customer.accountNumber
         );
-        // Show success message
-        alert('SMS sent successfully');
+        toast.success('SMS sent successfully');
       } else if (method === 'email' && customer.email) {
         await sendPaymentReminderEmail(
           customer.email,
           customer.fullName,
           customer.outstandingTotalBalance,
-          customer.id
+          customer.accountNumber
         );
-        // Show success message
-        alert('Email sent successfully');
-      } else if (method === 'whatsapp') {
-        // Implement WhatsApp functionality if needed
-        console.log('WhatsApp functionality not implemented yet');
+        toast.success('Email sent successfully');
+      } else {
+        toast.error(`No ${method === 'sms' ? 'phone number' : 'email'} available for this customer`);
       }
     } catch (error) {
       console.error(`Error sending ${method}:`, error);
-      alert(`Failed to send ${method}. Please try again.`);
+      toast.error(`Failed to send ${method}. Please try again.`);
+    } finally {
+      setSendingMessages(false);
     }
   };
 
-  const handleBulkAction = async (method: 'sms' | 'email' | 'whatsapp') => {
+  const handleBulkAction = async (method: 'sms' | 'email') => {
     try {
+      setSendingMessages(true);
       const selectedCustomerDetails = customers.filter(c => selectedCustomers.includes(c.id));
+      let successCount = 0;
+      let failCount = 0;
+      
+      setProgress({ current: 0, total: selectedCustomerDetails.length });
       
       for (const customer of selectedCustomerDetails) {
-        if (method === 'sms' && customer.phoneNumber) {
-          await sendPaymentReminderSMS(
-            customer.phoneNumber,
-            customer.fullName,
-            customer.outstandingTotalBalance,
-            customer.id
-          );
-        } else if (method === 'email' && customer.email) {
-          await sendPaymentReminderEmail(
-            customer.email,
-            customer.fullName,
-            customer.outstandingTotalBalance,
-            customer.id
-          );
+        try {
+          if (method === 'sms' && customer.phoneNumber) {
+            await sendPaymentReminderSMS(
+              customer.phoneNumber,
+              customer.fullName,
+              customer.outstandingTotalBalance,
+              customer.accountNumber
+            );
+            successCount++;
+          } else if (method === 'email' && customer.email) {
+            await sendPaymentReminderEmail(
+              customer.email,
+              customer.fullName,
+              customer.outstandingTotalBalance,
+              customer.accountNumber
+            );
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Error sending ${method} to ${customer.fullName}:`, error);
+          failCount++;
         }
+        
+        setProgress(prev => ({ ...prev, current: prev.current + 1 }));
       }
       
-      alert(`Bulk ${method} sent successfully`);
+      toast.success(
+        `Bulk ${method} completed: ${successCount} successful, ${failCount} failed`
+      );
+      
+      // Clear selection after successful bulk action
+      setSelectedCustomers([]);
     } catch (error) {
       console.error(`Error sending bulk ${method}:`, error);
-      alert(`Failed to send bulk ${method}. Please try again.`);
+      toast.error(`Failed to complete bulk ${method} operation. Please try again.`);
+    } finally {
+      setSendingMessages(false);
+      setProgress({ current: 0, total: 0 });
     }
   };
 
@@ -293,6 +290,19 @@ function AdminPaymentReminder() {
         </div>
       </div>
 
+      {/* Progress Bar for Bulk Actions */}
+      {sendingMessages && progress.total > 0 && (
+        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-4">
+          <div 
+            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+            style={{ width: `${(progress.current / progress.total) * 100}%` }}
+          />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            Processing: {progress.current} of {progress.total}
+          </p>
+        </div>
+      )}
+
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
@@ -330,42 +340,36 @@ function AdminPaymentReminder() {
             <Tooltip content="Send bulk SMS">
               <button
                 onClick={() => handleBulkAction('sms')}
+                disabled={selectedCustomers.length === 0 || sendingMessages}
                 className={`p-2 rounded-lg transition-all duration-200 ${
-                  selectedCustomers.length === 0
+                  selectedCustomers.length === 0 || sendingMessages
                     ? 'bg-gray-100 text-gray-400 dark:bg-gray-600 dark:text-gray-500 cursor-not-allowed'
                     : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 shadow-sm hover:shadow'
                 }`}
-                disabled={selectedCustomers.length === 0}
               >
-                <Phone className="w-5 h-5" />
+                {sendingMessages ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Phone className="w-5 h-5" />
+                )}
               </button>
             </Tooltip>
             
             <Tooltip content="Send bulk email">
               <button
                 onClick={() => handleBulkAction('email')}
+                disabled={selectedCustomers.length === 0 || sendingMessages}
                 className={`p-2 rounded-lg transition-all duration-200 ${
-                  selectedCustomers.length === 0
+                  selectedCustomers.length === 0 || sendingMessages
                     ? 'bg-gray-100 text-gray-400 dark:bg-gray-600 dark:text-gray-500 cursor-not-allowed'
                     : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 shadow-sm hover:shadow'
                 }`}
-                disabled={selectedCustomers.length === 0}
               >
-                <Mail className="w-5 h-5" />
-              </button>
-            </Tooltip>
-            
-            <Tooltip content="Send bulk WhatsApp">
-              <button
-                onClick={() => handleBulkAction('whatsapp')}
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  selectedCustomers.length === 0
-                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-600 dark:text-gray-500 cursor-not-allowed'
-                    : 'bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 shadow-sm hover:shadow'
-                }`}
-                disabled={selectedCustomers.length === 0}
-              >
-                <MessageSquare className="w-5 h-5" />
+                {sendingMessages ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Mail className="w-5 h-5" />
+                )}
               </button>
             </Tooltip>
           </div>
@@ -489,16 +493,6 @@ function AdminPaymentReminder() {
                             }`}
                           >
                             <Mail className="w-4 h-4" />
-                          </button>
-                        </Tooltip>
-                        
-                        <Tooltip content="Send WhatsApp (Coming Soon)">
-                          <button
-                            onClick={() => handleSingleAction(customer, 'whatsapp')}
-                            disabled={true}
-                            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                          >
-                            <MessageSquare className="w-4 h-4" />
                           </button>
                         </Tooltip>
                       </div>
