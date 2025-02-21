@@ -1,5 +1,6 @@
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc, setDoc, increment } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { format } from 'date-fns';
 
 // Helper function to format phone number
 const formatPhoneNumber = (phoneNumber: string | number | null | undefined) => {
@@ -31,6 +32,37 @@ export interface CommunicationRecord {
   status: 'sent' | 'delivered' | 'failed';
 }
 
+// Helper function to update communication stats
+const updateCommunicationStats = async (type: 'sms' | 'email' | 'whatsapp') => {
+  try {
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const statsRef = doc(db, 'communicationStats', currentMonth);
+    
+    // Get current stats
+    const statsDoc = await getDoc(statsRef);
+    
+    if (statsDoc.exists()) {
+      // Update existing stats
+      await setDoc(statsRef, {
+        month: currentMonth,
+        [type]: increment(1),
+        timestamp: serverTimestamp(),
+      }, { merge: true });
+    } else {
+      // Create new stats document
+      await setDoc(statsRef, {
+        month: currentMonth,
+        sms: type === 'sms' ? 1 : 0,
+        email: type === 'email' ? 1 : 0,
+        whatsapp: type === 'whatsapp' ? 1 : 0,
+        timestamp: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error('Error updating communication stats:', error);
+  }
+};
+
 export const recordCommunication = async (data: CommunicationRecord) => {
   try {
     const communicationsRef = collection(db, 'communications');
@@ -41,6 +73,8 @@ export const recordCommunication = async (data: CommunicationRecord) => {
     };
 
     await addDoc(communicationsRef, communicationData);
+    // Update stats when communication is recorded
+    await updateCommunicationStats(data.type);
     return true;
   } catch (error) {
     console.error('Error recording communication:', error);
