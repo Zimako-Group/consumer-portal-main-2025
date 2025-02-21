@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, UserPlus, Pencil, Loader2, Download, MessageSquare, Mail, MessageCircle } from 'lucide-react';
+import { Search, UserPlus, Pencil, Loader2, Download, MessageSquare, Mail, MessageCircle, History } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, doc, getDoc, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useTheme } from '../contexts/ThemeContext';
 import { generateStatement } from './StatementGenerator';
 import toast from 'react-hot-toast';
-import { sendSMS, sendEmail } from '../services/infobipService';
+import { sendSMSAndRecord, sendEmailAndRecord, sendWhatsAppAndRecord } from '../services/communicationService';
+import CommunicationHistory from './CommunicationHistory';
 
 interface ContactDetails {
   address: string;
@@ -67,6 +68,7 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
   const [currentPage, setCurrentPage] = useState(1);
   const [generatingStatement, setGeneratingStatement] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [selectedAccountForHistory, setSelectedAccountForHistory] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
 
   const ITEMS_PER_PAGE = 10;
@@ -203,60 +205,49 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
     }
   };
 
-  const handleSendSMS = async (profile: Profile) => {
-    console.log('Full profile data:', profile);
-    console.log('Phone number:', profile.cellNumber);
-  
-    if (!profile.cellNumber || profile.cellNumber === 'N/A') {
-      toast.error('Failed: No Customer Number');
+  const handleMessage = async (profile: Profile) => {
+    const phoneNumber = profile.cellNumber || profile.contactDetails?.phoneNumber;
+    if (!phoneNumber) {
+      toast.error('No phone number available for this account');
       return;
     }
-  
-    if (!profile.accountNumber) {
-      toast.error('No account number available');
-      return;
-    }
-  
+
+    setSendingMessage(true);
     try {
-      setSendingMessage(true);
-      const response = await sendSMS(profile.cellNumber, profile.accountNumber);
-      
-      if (response.success) {
-        toast.success('SMS sent successfully');
-      } else {
-        toast.error(response.message);
-      }
+      const message = `Dear ${profile.accountHolderName}, this is a test message from the consumer portal.`;
+      await sendSMSAndRecord(
+        phoneNumber,
+        message,
+        profile.accountNumber,
+        'System Admin'
+      );
+      toast.success('Message sent successfully');
     } catch (error) {
-      console.error('Error sending SMS:', error);
-      toast.error('Failed to send SMS');
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message');
     } finally {
       setSendingMessage(false);
     }
   };
-  
-  const handleSendEmail = async (profile: Profile) => {
-    console.log('Full profile data:', profile);
-    console.log('Email address:', profile.contactDetails?.email);
-  
-    if (!profile.contactDetails?.email || profile.contactDetails.email === 'N/A') {
-      toast.error('Failed: No Email Address');
+
+  const handleEmail = async (profile: Profile) => {
+    if (!profile.contactDetails?.email) {
+      toast.error('No email address available for this account');
       return;
     }
-  
-    if (!profile.accountNumber) {
-      toast.error('No account number available');
-      return;
-    }
-  
+
+    setSendingMessage(true);
     try {
-      setSendingMessage(true);
-      const response = await sendEmail(profile.contactDetails.email, profile.accountNumber);
-      
-      if (response.success) {
-        toast.success('Email sent successfully');
-      } else {
-        toast.error(response.message);
-      }
+      const subject = 'Consumer Portal Notification';
+      const message = `Dear ${profile.accountHolderName}, this is a test email from the consumer portal.`;
+      await sendEmailAndRecord(
+        profile.contactDetails.email,
+        subject,
+        message,
+        profile.accountNumber,
+        'System Admin'
+      );
+      toast.success('Email sent successfully');
     } catch (error) {
       console.error('Error sending email:', error);
       toast.error('Failed to send email');
@@ -265,20 +256,29 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
     }
   };
 
-  const handleWhatsAppMessage = (profile: Profile) => {
-    if (!profile.cellNumber || profile.cellNumber === 'N/A') {
-      toast.error('Failed: No WhatsApp Number');
+  const handleWhatsApp = async (profile: Profile) => {
+    const phoneNumber = profile.cellNumber || profile.contactDetails?.phoneNumber;
+    if (!phoneNumber) {
+      toast.error('No phone number available for this account');
       return;
     }
 
-    // Format the phone number (remove spaces, add country code if needed)
-    let phoneNumber = profile.cellNumber.replace(/\s+/g, '');
-    if (!phoneNumber.startsWith('+')) {
-      phoneNumber = '+27' + phoneNumber.replace(/^0/, '');
+    setSendingMessage(true);
+    try {
+      const message = `Dear ${profile.accountHolderName}, this is a test WhatsApp message from the consumer portal.`;
+      await sendWhatsAppAndRecord(
+        phoneNumber,
+        message,
+        profile.accountNumber,
+        'System Admin'
+      );
+      toast.success('WhatsApp message sent successfully');
+    } catch (error) {
+      console.error('Error sending WhatsApp message:', error);
+      toast.error('Failed to send WhatsApp message');
+    } finally {
+      setSendingMessage(false);
     }
-
-    // Open WhatsApp in a new window
-    window.open(`https://wa.me/${phoneNumber}`, '_blank');
   };
 
   if (loading) {
@@ -430,19 +430,19 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
                       </button>
 
                       <button
-                        onClick={() => handleSendSMS(profile)}
-                        disabled={sendingMessage || !profile.cellNumber}
+                        onClick={() => handleMessage(profile)}
+                        disabled={sendingMessage || (!profile.cellNumber && !profile.contactDetails?.phoneNumber)}
                         className={`flex items-center text-xs px-2.5 py-1.5 rounded-full
                           ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}
-                          ${!profile.cellNumber && 'opacity-50 cursor-not-allowed'}
+                          ${(!profile.cellNumber && !profile.contactDetails?.phoneNumber) && 'opacity-50 cursor-not-allowed'}
                           transition-colors duration-200 text-purple-500`}
-                        title={profile.cellNumber ? "Send SMS" : "No phone number available"}
+                        title={profile.cellNumber || profile.contactDetails?.phoneNumber ? "Send Message" : "No phone number available"}
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                       </button>
 
                       <button
-                        onClick={() => handleSendEmail(profile)}
+                        onClick={() => handleEmail(profile)}
                         disabled={sendingMessage || !profile.contactDetails?.email}
                         className={`flex items-center text-xs px-2.5 py-1.5 rounded-full
                           ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}
@@ -454,15 +454,24 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
                       </button>
 
                       <button
-                        onClick={() => handleWhatsAppMessage(profile)}
-                        disabled={!profile.cellNumber}
+                        onClick={() => handleWhatsApp(profile)}
+                        disabled={(!profile.cellNumber && !profile.contactDetails?.phoneNumber)}
                         className={`flex items-center text-xs px-2.5 py-1.5 rounded-full
                           ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}
-                          ${!profile.cellNumber && 'opacity-50 cursor-not-allowed'}
+                          ${(!profile.cellNumber && !profile.contactDetails?.phoneNumber) && 'opacity-50 cursor-not-allowed'}
                           transition-colors duration-200 text-green-500`}
-                        title={profile.cellNumber ? "Send WhatsApp Message" : "No phone number available"}
+                        title={profile.cellNumber || profile.contactDetails?.phoneNumber ? "Send WhatsApp Message" : "No phone number available"}
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedAccountForHistory(profile.accountNumber)}
+                        className={`flex items-center text-xs px-2.5 py-1.5 rounded-full
+                          ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}
+                          transition-colors duration-200 text-purple-600`}
+                      >
+                        <History className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -584,6 +593,14 @@ export default function AccountsView({ onCreateProfile, onEditProfile }: Account
             </nav>
           </div>
         </div>
+      )}
+      {selectedAccountForHistory && (
+        <CommunicationHistory
+          isOpen={true}
+          onClose={() => setSelectedAccountForHistory(null)}
+          accountNumber={selectedAccountForHistory}
+          accountHolderName={profiles.find(p => p.accountNumber === selectedAccountForHistory)?.accountHolderName || ''}
+        />
       )}
     </div>
   );

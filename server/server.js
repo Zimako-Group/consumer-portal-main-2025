@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true
 }));
 
@@ -28,9 +28,11 @@ const bucket = admin.storage().bucket();
 
 // Import routes
 const adminUsersRouter = require('./routes/adminUsers');
+const communicationsRouter = require('./routes/communications');
 
 // Use routes
 app.use('/api', adminUsersRouter);
+app.use('/api', communicationsRouter);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
