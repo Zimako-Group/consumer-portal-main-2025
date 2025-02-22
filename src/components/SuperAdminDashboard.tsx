@@ -17,6 +17,7 @@ import ZimakoAIChatBot from './ZimakoAIChatBot';
 import ActiveUsersCard from './analytics/ActiveUsersCard';
 import AdminMeterReadings from './AdminMeterReadings';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import jellyfishBg from '../assets/jellyfish-bg.svg';
 import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -31,6 +32,14 @@ const getGreeting = () => {
 
 export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void }) {
   const { isDarkMode } = useTheme();
+  const { currentUser, userData } = useAuth();
+
+  // Log user data for debugging
+  useEffect(() => {
+    console.log('Current User:', currentUser);
+    console.log('User Data:', userData);
+  }, [currentUser, userData]);
+
   const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
@@ -394,7 +403,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
                     {getGreeting()},
                   </h1>
                   <h2 className="text-4xl md:text-6xl font-playfair text-gray-800 dark:text-gray-200 animate-fade-in-delayed">
-                    Rofhiwa Mudau
+                    {userData?.fullName || userData?.name || (currentUser?.email?.split('@')[0]?.split('.')?.[0] + ' ' + currentUser?.email?.split('@')[0]?.split('.')?.[1])?.replace(/\b\w/g, l => l.toUpperCase()) || 'Super Admin'}
                   </h2>
                   <p className="mt-8 text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-delayed leading-relaxed">
                     Welcome to your super admin dashboard. Here you can manage reports, view analytics, and handle customer queries.

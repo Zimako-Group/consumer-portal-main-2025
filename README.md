@@ -88,6 +88,56 @@ consumer-portal/
 
 ## Features in Detail
 
+### Creating Super Admin Users
+
+Super Admin users have the highest level of access in the system and can manage all aspects of the portal. Follow these steps to create a Super Admin user:
+
+1. **Prerequisites**:
+   - You must have Firebase Admin SDK access
+   - You must have access to the Firebase Console
+   - The application must be properly configured with Firebase
+
+2. **Using the Admin Dashboard**:
+   - Log in to the portal with an existing Super Admin account
+   - Navigate to "Users" → "Add Users" in the navigation menu
+   - Fill in the following details:
+     - Email Address
+     - Password (must meet security requirements)
+     - Full Name
+   - Select "Super Admin" as the role
+   - Click "Create User"
+
+3. **Security Requirements**:
+   - Password must be at least 8 characters long
+   - Must contain at least one uppercase letter
+   - Must contain at least one number
+   - Must contain at least one special character
+   - Example format: `Password123@`
+
+4. **First-time Login**:
+   - The new Super Admin should log in using the provided credentials
+   - They will be prompted to change their password on first login
+   - After password change, they will have full access to all Super Admin features
+
+5. **Super Admin Capabilities**:
+   - Create and manage other admin users
+   - Access all customer accounts
+   - Generate and view all reports
+   - Manage system configurations
+   - Handle customer queries
+   - View and manage meter readings
+   - Access payment reminders and statements
+
+6. **Best Practices**:
+   - Create Super Admin accounts only for authorized personnel
+   - Regularly audit Super Admin account access
+   - Enforce strong password policies
+   - Monitor Super Admin activities through system logs
+   - Remove access immediately when no longer needed
+
+   ## Creating Super Admin
+   - Navigate to 'Scripts', 'createNewSuperAdmin.js', add admin details and run 'node scripts/createNewSuperAdmin.js' in the terminal
+
 ### Statement Generation
 - Generate professional PDF statements
 - Integrated bank payment links

@@ -26,6 +26,7 @@ import {
   Settings
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
@@ -43,9 +44,14 @@ interface NavItem {
 
 const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, currentView }) => {
   const { isDarkMode, toggleTheme, themeColor, setThemeColor } = useTheme();
+  const { currentUser, userData } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notifications] = useState(3);
   const [activeItem, setActiveItem] = useState('Home');
+
+  const getUserDisplayName = () => {
+    return userData?.fullName || userData?.name || (currentUser?.email?.split('@')[0]?.split('.')?.[0] + ' ' + currentUser?.email?.split('@')[0]?.split('.')?.[1])?.replace(/\b\w/g, l => l.toUpperCase()) || 'Super Admin';
+  };
 
   const navigation: NavItem[] = [
     { 
@@ -262,12 +268,12 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, c
                 <Menu.Button className="flex items-center space-x-2">
                   <img
                     className="h-8 w-8 rounded-full"
-                    src="https://ui-avatars.com/api/?name=Rofhiwa+Mudau"
+                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(getUserDisplayName())}`}
                     alt="Profile"
                   />
                   <div className="hidden md:block text-left">
                     <span className={`text-sm font-medium ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-700'}`}>
-                      Rofhiwa Mudau
+                      {getUserDisplayName()}
                     </span>
                     <br />
                     <span className={`text-xs ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-500'}`}>
