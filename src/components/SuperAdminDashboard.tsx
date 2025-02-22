@@ -35,7 +35,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
-      title: "Total Revenue",
+      title: "Total Outstanding Revenue",
       value: "Loading...",
       change: 0,
       icon: <DollarSign className="text-blue-500" size={24} />,
@@ -50,14 +50,14 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     },
     {
       title: "Total Meters",
-      value: "+3,052",
+      value: "Loading...",
       change: -1.8,
       icon: <Building2 className="text-orange-500" size={24} />,
       iconBgColor: "bg-orange-100 dark:bg-orange-900/20"
     },
     {
       title: "Total Payments",
-      value: "R173,000",
+      value: "Loading...",
       change: 8.0,
       icon: <CreditCard className="text-green-500" size={24} />,
       iconBgColor: "bg-green-100 dark:bg-green-900/20"
@@ -166,7 +166,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 
       // Update stats data
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Total Revenue" 
+        stat.title === "Total Outstanding Revenue" 
           ? {
               ...stat,
               value: `R${totalRevenue.toLocaleString(undefined, {
@@ -181,7 +181,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     } catch (error) {
       console.error('Error fetching total revenue:', error);
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Total Revenue" 
+        stat.title === "Total Outstanding Revenue" 
           ? {
               ...stat,
               value: "Error",
