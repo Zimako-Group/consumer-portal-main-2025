@@ -36,8 +36,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   const [statsData, setStatsData] = useState([
     {
       title: "Total Revenue",
-      value: "R53,000",
-      change: 5.5,
+      value: "Loading...",
+      change: 0,
       icon: <DollarSign className="text-blue-500" size={24} />,
       iconBgColor: "bg-blue-100 dark:bg-blue-900/20"
     },
@@ -128,9 +128,70 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     }
   };
 
-  // Fetch active users when component mounts
+  // Function to fetch total revenue
+  const fetchTotalRevenue = async () => {
+    try {
+      const customersRef = collection(db, 'customers');
+      const querySnapshot = await getDocs(customersRef);
+      
+      let totalRevenue = 0;
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        // Check if lastPaymentAmount exists and is a number
+        if (typeof data.lastPaymentAmount === 'number') {
+          // Convert negative payment to positive
+          const amount = data.lastPaymentAmount < 0 ? -data.lastPaymentAmount : data.lastPaymentAmount;
+          
+          totalRevenue += amount;
+          
+          console.log('Added payment:', {
+            accountNumber: data.accountNumber,
+            originalAmount: data.lastPaymentAmount,
+            convertedAmount: amount,
+            runningTotal: totalRevenue
+          });
+        }
+      });
+
+      console.log('Final revenue calculation:', {
+        totalRevenue,
+        totalAccounts: querySnapshot.size
+      });
+
+      // Update stats data with positive values
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Revenue" 
+          ? {
+              ...stat,
+              value: `R${totalRevenue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })}`,
+              change: 0 // Since we're not tracking monthly changes anymore
+            }
+          : stat
+      ));
+
+    } catch (error) {
+      console.error('Error fetching total revenue:', error);
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Revenue" 
+          ? {
+              ...stat,
+              value: "Error",
+              change: 0
+            }
+          : stat
+      ));
+    }
+  };
+
+  // Fetch both active users and total revenue when component mounts
   useEffect(() => {
     fetchActiveUsers();
+    fetchTotalRevenue();
   }, []);
 
   return (
