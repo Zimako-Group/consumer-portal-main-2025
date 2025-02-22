@@ -18,6 +18,8 @@ import ActiveUsersCard from './analytics/ActiveUsersCard';
 import AdminMeterReadings from './AdminMeterReadings';
 import { useTheme } from '../contexts/ThemeContext';
 import jellyfishBg from '../assets/jellyfish-bg.svg';
+import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 import '../styles/dashboard.css';
 
 const getGreeting = () => {
@@ -31,8 +33,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   const { isDarkMode } = useTheme();
   const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
-
-  const statsData = [
+  const [statsData, setStatsData] = useState([
     {
       title: "Total Revenue",
       value: "R53,000",
@@ -42,8 +43,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     },
     {
       title: "Active Users",
-      value: "2,300",
-      change: 3.2,
+      value: "Loading...",
+      change: 0,
       icon: <Users className="text-purple-500" size={24} />,
       iconBgColor: "bg-purple-100 dark:bg-purple-900/20"
     },
@@ -61,7 +62,76 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
       icon: <CreditCard className="text-green-500" size={24} />,
       iconBgColor: "bg-green-100 dark:bg-green-900/20"
     }
-  ];
+  ]);
+
+  // Function to fetch active users count
+  const fetchActiveUsers = async () => {
+    try {
+      // Create Firestore query for current active users
+      const customersRef = collection(db, 'customers');
+      const activeUsersQuery = query(
+        customersRef,
+        where('accountStatus', 'in', ['ACTIVE', 'Active'])
+      );
+
+      // Create query for previous month's data
+      const previousMonthQuery = query(
+        customersRef,
+        where('accountStatus', 'in', ['INACTIVE', 'Inactive'])
+      );
+
+      // Execute queries
+      const [currentSnapshot, previousSnapshot] = await Promise.all([
+        getDocs(activeUsersQuery),
+        getDocs(previousMonthQuery)
+      ]);
+
+      const currentActiveUsers = currentSnapshot.size;
+      const previousActiveUsers = previousSnapshot.size;
+      const totalCustomers = currentActiveUsers + previousActiveUsers;
+
+      // Calculate percentage of active users
+      const change = totalCustomers > 0 
+        ? ((currentActiveUsers / totalCustomers) * 100) - 50 // Normalize around 50% for the change indicator
+        : 0;
+
+      console.log('Active customers found:', {
+        currentActive: currentActiveUsers,
+        previousInactive: previousActiveUsers,
+        total: totalCustomers,
+        change: change
+      });
+
+      // Update stats data
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Active Users" 
+          ? {
+              ...stat,
+              value: currentActiveUsers.toLocaleString(),
+              change: Number(change.toFixed(1))
+            }
+          : stat
+      ));
+
+    } catch (error) {
+      console.error('Error fetching active users:', error);
+      // Update with error state
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Active Users" 
+          ? {
+              ...stat,
+              value: "Error",
+              change: 0
+            }
+          : stat
+      ));
+    }
+  };
+
+  // Fetch active users when component mounts
+  useEffect(() => {
+    fetchActiveUsers();
+  }, []);
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
