@@ -1024,6 +1024,34 @@ export default function MeterReadings() {
                 </div>
 
                 <div>
+                  <label htmlFor="previousReading" className="block text-sm font-medium text-gray-700">
+                    Previous Reading
+                  </label>
+                  <input
+                    type="text"
+                    id="previousReading"
+                    value={data[0]?.previousReading ? `${data[0].previousReading} kWh` : 'No previous reading'}
+                    readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">Last submitted meter reading</p>
+                </div>
+
+                <div>
+                  <label htmlFor="previousReadingDate" className="block text-sm font-medium text-gray-700">
+                    Previous Reading Date
+                  </label>
+                  <input
+                    type="text"
+                    id="previousReadingDate"
+                    value={data[0]?.currentReadingDate ? format(data[0].currentReadingDate, 'PPP') : 'No previous date'}
+                    readOnly
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-100 cursor-not-allowed"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">Date of last submitted reading</p>
+                </div>
+
+                <div>
                   <label htmlFor="currentReading" className="block text-sm font-medium text-gray-700">
                     Current Reading
                   </label>

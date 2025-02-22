@@ -5,6 +5,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Search, Mail, MessageSquare, Phone, Bell, Calendar, Clock, X, Plus, Edit, Trash } from 'lucide-react';
+import { sendSMSAndRecord, sendEmailAndRecord } from '../services/communicationService';
+import { useAuth } from '../contexts/AuthContext';
+import { updateCommunicationStats } from '../services/communicationService';
 
 interface CustomerData {
   accountHolderName: string;
@@ -38,6 +41,12 @@ interface ReminderData {
   customerName?: string;
   channel?: 'sms' | 'email' | 'whatsapp';
   contactInfo?: string;
+  department?: string;
+  purpose?: string;
+  sentDate?: string;
+  amount?: number;
+  success?: boolean;
+  errorMessage?: string;
 }
 
 interface TemplateMessage {
@@ -164,7 +173,6 @@ const SuperPaymentReminder: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation checks
     if (!selectedCustomer) {
       toast.error('Please select a customer first');
       return;
@@ -175,12 +183,9 @@ const SuperPaymentReminder: React.FC = () => {
       return;
     }
 
-    // Channel-specific validation
-    if (selectedChannel === 'email') {
-      if (!selectedCustomer.emailAddress || selectedCustomer.emailAddress === 'N/A') {
-        toast.error('Selected customer does not have a valid email address');
-        return;
-      }
+    if (selectedChannel === 'email' && (!selectedCustomer.emailAddress || selectedCustomer.emailAddress === 'N/A')) {
+      toast.error('Selected customer does not have a valid email address');
+      return;
     }
 
     if (selectedChannel === 'sms' && 
@@ -209,21 +214,28 @@ const SuperPaymentReminder: React.FC = () => {
         return;
       }
 
+      // Store the reminder in Firestore with pending status for scheduled delivery
       const reminderData = {
         message,
         timestamp: Timestamp.now(),
         scheduledDate: Timestamp.fromDate(scheduledDateTime),
-        status: 'pending',
+        status: 'pending', // Set as pending for scheduled messages
         channel: selectedChannel,
         accountNumber: selectedCustomer.accountNumber,
         customerName: selectedCustomer.accountHolderName,
         contactInfo: selectedChannel === 'email' 
           ? selectedCustomer.emailAddress 
-          : selectedCustomer.cellNumber
+          : selectedCustomer.cellNumber,
+        department: 'billing',
+        purpose: 'payment_reminder',
+        amount: selectedCustomer.outstandingTotalBalance,
+        success: null,
+        errorMessage: null
       };
 
       await addDoc(collection(db, 'paymentReminders'), reminderData);
-      toast.success('Reminder scheduled successfully');
+      
+      toast.success(`Reminder scheduled for ${scheduledDateTime.toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}`);
       
       // Reset form
       setMessage('');
@@ -236,7 +248,7 @@ const SuperPaymentReminder: React.FC = () => {
       fetchReminders();
     } catch (error) {
       console.error('Error scheduling reminder:', error);
-      toast.error('Failed to schedule reminder');
+      toast.error(`Failed to schedule reminder: ${error.message}`);
     } finally {
       setLoading(false);
     }
