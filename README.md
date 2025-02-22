@@ -159,6 +159,34 @@ Super Admin users have the highest level of access in the system and can manage 
 - System settings management
 - Activity monitoring
 
+## Code Analysis
+
+### Counting Lines of Code
+To get a detailed breakdown of the codebase size and language distribution, you can use the `cloc` (Count Lines of Code) tool. This will exclude common directories that shouldn't be counted like node_modules, git files, and build outputs.
+
+1. **Install cloc** (if not already installed):
+```bash
+npm install -g cloc
+```
+
+2. **Run the count command**:
+```bash
+cloc . --exclude-dir=node_modules,.git,dist,build
+```
+
+This will generate a report showing:
+- Total number of files by language
+- Blank lines
+- Comment lines
+- Lines of actual code
+- A summary of the project size
+
+The command excludes:
+- `node_modules/`: Third-party dependencies
+- `.git/`: Version control files
+- `dist/`: Production build files
+- `build/`: Compilation output
+
 ## Contributing
 
 1. Fork the repository
