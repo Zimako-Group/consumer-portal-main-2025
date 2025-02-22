@@ -57,7 +57,7 @@ export default function AdminMeterReadings() {
   const [selectedReading, setSelectedReading] = useState<MeterReading | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'week' | 'month' | 'year'>('month');
+  const [selectedMonth, setSelectedMonth] = useState('2024-09');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -144,43 +144,27 @@ export default function AdminMeterReadings() {
   const chartData = useMemo(() => {
     if (!data.length) return null;
 
-    // Safe date parsing function
-    const parseDate = (dateInput: any) => {
-      try {
-        if (!dateInput) return null;
-        
-        // Handle Firestore Timestamp
-        if (dateInput?.toDate instanceof Function) {
-          return dateInput.toDate();
-        }
-        
-        // Handle Date object
-        if (dateInput instanceof Date) {
-          return dateInput;
-        }
-        
-        // Handle string date
-        if (typeof dateInput === 'string') {
-          const parsedDate = new Date(dateInput);
-          return !isNaN(parsedDate.getTime()) ? parsedDate : null;
-        }
-        
-        return null;
-      } catch {
-        return null;
-      }
-    };
+    // Filter data for September 2024
+    const filteredData = data.filter(reading => {
+      const readingDate = reading.currentReadingDate instanceof Date 
+        ? reading.currentReadingDate 
+        : reading.currentReadingDate?.toDate();
+      if (!readingDate) return false;
+      
+      const [year, month] = selectedMonth.split('-').map(Number);
+      return readingDate.getFullYear() === year && readingDate.getMonth() === month - 1;
+    }).sort((a, b) => {
+      const dateA = a.currentReadingDate instanceof Date ? a.currentReadingDate : a.currentReadingDate?.toDate();
+      const dateB = b.currentReadingDate instanceof Date ? b.currentReadingDate : b.currentReadingDate?.toDate();
+      return dateA && dateB ? dateA.getTime() - dateB.getTime() : 0;
+    });
 
-    // Filter and sort valid data entries
-    const validData = data
-      .filter(reading => parseDate(reading.currentReadingDate) !== null)
-      .sort((a, b) => {
-        const dateA = parseDate(a.currentReadingDate)!;
-        const dateB = parseDate(b.currentReadingDate)!;
-        return dateA.getTime() - dateB.getTime();
-      });
+    if (!filteredData.length) return null;
 
-    if (!validData.length) return null;
+    // Reduce data points if too many
+    const maxDataPoints = 31; // Maximum days in a month
+    const step = Math.ceil(filteredData.length / maxDataPoints);
+    const sampledData = filteredData.filter((_, index) => index % step === 0);
 
     return {
       options: {
@@ -190,8 +174,8 @@ export default function AdminMeterReadings() {
             show: false
           },
           background: 'transparent',
-          zoom: {
-            enabled: true
+          animations: {
+            enabled: false
           }
         },
         dataLabels: {
@@ -215,8 +199,10 @@ export default function AdminMeterReadings() {
         },
         colors: ['#2563eb'],
         xaxis: {
-          categories: validData.map(reading => {
-            const date = parseDate(reading.currentReadingDate);
+          categories: sampledData.map(reading => {
+            const date = reading.currentReadingDate instanceof Date 
+              ? reading.currentReadingDate 
+              : reading.currentReadingDate?.toDate();
             return date ? format(date, 'dd/MM/yyyy') : 'Invalid Date';
           }),
           labels: {
@@ -234,7 +220,7 @@ export default function AdminMeterReadings() {
           axisTicks: {
             show: false
           },
-          tickAmount: Math.min(validData.length, 10)
+          tickAmount: Math.min(sampledData.length, 10)
         },
         yaxis: {
           labels: {
@@ -270,14 +256,22 @@ export default function AdminMeterReadings() {
             show: true,
             format: 'dd/MM/yyyy'
           }
+        },
+        title: {
+          text: 'Consumption Trend - September 2024',
+          align: 'center',
+          style: {
+            fontSize: '16px',
+            color: isDarkMode ? '#fff' : '#000'
+          }
         }
       },
       series: [{
         name: 'Consumption',
-        data: validData.map(reading => reading.consumption)
+        data: sampledData.map(reading => reading.consumption)
       }]
     };
-  }, [data, isDarkMode]);
+  }, [data, isDarkMode, selectedMonth]);
 
   const StatusIndicator = ({ status, consumption, previousConsumption }: { status: string, consumption: number, previousConsumption?: number }) => {
     const trend = previousConsumption
@@ -518,17 +512,15 @@ export default function AdminMeterReadings() {
             <option value="approved">Approved</option>
           </select>
           <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value as 'week' | 'month' | 'year')}
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
             className={`px-3 py-2 rounded-lg border ${
               isDarkMode 
                 ? 'bg-gray-800 border-gray-700 text-white' 
                 : 'bg-white border-gray-300 text-gray-900'
             } focus:outline-none focus:ring-2 focus:ring-blue-500`}
           >
-            <option value="week">Last Week</option>
-            <option value="month">Last Month</option>
-            <option value="year">Last Year</option>
+            <option value="2024-09">September 2024</option>
           </select>
         </div>
       </div>
