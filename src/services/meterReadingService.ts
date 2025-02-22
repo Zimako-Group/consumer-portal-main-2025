@@ -1,43 +1,48 @@
-import { collection, query, where, getDocs, writeBatch, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, writeBatch, doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export interface MeterReading {
-  uploadDate: string;
-  Period: string;
-  AccountNo: string;
   AccountHolder: string;
-  ErfNo: string;
+  AccountNo: string;
   Address: string;
-  Ward: string;
-  Town: string;
-  Suburb: string;
-  Reservoir: string;
-  LocalAuthority: string;
-  MeterType: string;
-  HistType: string;
-  MeterAlpha: string;
-  MeterNumber: string;
-  Book: string;
-  Seq: string;
-  Status: string;
-  Factor: number;
   AmpsPhase: string;
-  PrevRead: number;
-  PrevReadDate: string;
-  CurrRead: number;
-  CurrReadDate: string;
-  ReadType: string;
-  Consumption: number;
-  TariffCode: string;
-  Description: string;
   AppliesToAccountType: string;
-  ConsAmount: number;
-  ConsRebate: number;
   BasicAmount: number;
   BasicRebate: number;
+  Book: string;
+  ConsAmount: number;
+  ConsRebate: number;
+  Consumption: number;
+  CurrRead: number;
+  CurrReadDate: string;
+  Description: string;
+  ErfNo: string;
+  Factor: number;
+  HistType: string;
+  LocalAuthority: string;
+  MeterAlpha: string;
+  MeterNumber: string;
+  MeterType: string;
+  Period: string;
+  PrevRead: number;
+  PrevReadDate: string;
+  ReadType: string;
+  Reservoir: string;
+  Seq: string;
+  Status: string;
+  Suburb: string;
   SurCharge: number;
-  VATAmount: number;
+  TariffCode: string;
   TotLevied: number;
+  Town: string;
+  VATAmount: number;
+  Ward: string;
+  uploadDate: string;
+  // Additional fields used internally
+  accountNoIndex?: string;
+  month?: string;
+  year?: string;
+  uploadTimestamp?: string;
 }
 
 export interface UploadProgress {
@@ -184,45 +189,76 @@ export const getMeterReadingsForCustomer = async (
   date?: string
 ): Promise<MeterReading[]> => {
   try {
-    if (date) {
-      const { year, month } = validateAndFormatDate(date);
-      const monthCollectionRef = collection(db, 'meterReadings', year, month);
-      
-      console.log(`Fetching readings for account ${accountNumber} in ${year}-${month}`);
-      const meterReadingsQuery = query(
-        monthCollectionRef,
-        where('accountNoIndex', '==', accountNumber.toLowerCase())
-      );
-      
-      const querySnapshot = await getDocs(meterReadingsQuery);
-      return querySnapshot.docs.map(doc => ({
-        ...doc.data() as MeterReading
-      }));
-    } else {
-      // If no date provided, search across all months in the current year
-      const currentYear = new Date().getFullYear().toString();
-      const yearCollection = collection(db, 'meterReadings', currentYear);
-      
-      console.log(`Fetching all readings for account ${accountNumber} in ${currentYear}`);
-      const allMonthsSnapshot = await getDocs(yearCollection);
-      
-      const readings: MeterReading[] = [];
-      for (const monthDoc of allMonthsSnapshot.docs) {
-        const monthCollectionRef = collection(yearCollection, monthDoc.id);
-        const meterReadingsQuery = query(
-          monthCollectionRef,
-          where('accountNoIndex', '==', accountNumber.toLowerCase())
-        );
-        const querySnapshot = await getDocs(meterReadingsQuery);
-        readings.push(...querySnapshot.docs.map(doc => ({
-          ...doc.data() as MeterReading
-        })));
-      }
-      
-      return readings;
+    // Default to 2024/09 as per your structure
+    const defaultYear = '2024';
+    const defaultMonth = '09';
+
+    const year = date ? validateAndFormatDate(date).year : defaultYear;
+    const month = date ? validateAndFormatDate(date).month : defaultMonth;
+
+    console.log(`Fetching meter readings for account ${accountNumber} in ${year}-${month}`);
+
+    // Create reference to the specific customer's meter reading document
+    const meterReadingRef = doc(db, 'meterReadings', year, month, accountNumber);
+    const docSnapshot = await getDoc(meterReadingRef);
+
+    if (!docSnapshot.exists()) {
+      console.log(`No meter readings found for account ${accountNumber} in ${year}-${month}`);
+      return [];
     }
+
+    const data = docSnapshot.data();
+    console.log('Retrieved meter reading data:', data);
+
+    // Map the exact structure from Firestore
+    const meterReading: MeterReading = {
+      AccountHolder: data.AccountHolder || '',
+      AccountNo: data.AccountNo || accountNumber,
+      Address: data.Address || '',
+      AmpsPhase: data.AmpsPhase || '',
+      AppliesToAccountType: data.AppliesToAccountType || '',
+      BasicAmount: data.BasicAmount || 0,
+      BasicRebate: data.BasicRebate || 0,
+      Book: data.Book || '',
+      ConsAmount: data.ConsAmount || 0,
+      ConsRebate: data.ConsRebate || 0,
+      Consumption: data.Consumption || 0,
+      CurrRead: data.CurrRead || 0,
+      CurrReadDate: data.CurrReadDate || '',
+      Description: data.Description || '',
+      ErfNo: data.ErfNo || '',
+      Factor: data.Factor || 1,
+      HistType: data.HistType || '',
+      LocalAuthority: data.LocalAuthority || '',
+      MeterAlpha: data.MeterAlpha || '',
+      MeterNumber: data.MeterNumber || '',
+      MeterType: data.MeterType || '',
+      Period: data.Period || '',
+      PrevRead: data.PrevRead || 0,
+      PrevReadDate: data.PrevReadDate || '',
+      ReadType: data.ReadType || '',
+      Reservoir: data.Reservoir || '',
+      Seq: data.Seq || '',
+      Status: data.Status || '',
+      Suburb: data.Suburb || '',
+      SurCharge: data.SurCharge || 0,
+      TariffCode: data.TariffCode || '',
+      TotLevied: data.TotLevied || 0,
+      Town: data.Town || '',
+      VATAmount: data.VATAmount || 0,
+      Ward: data.Ward || '',
+      uploadDate: data.uploadDate || `${year}-${month}`,
+      // Include additional fields that might be used internally
+      accountNoIndex: data.accountNoIndex || accountNumber.toLowerCase(),
+      month: data.month || month,
+      year: data.year || year,
+      uploadTimestamp: data.uploadTimestamp || new Date().toISOString()
+    };
+
+    console.log('Mapped meter reading:', meterReading);
+    return [meterReading];
   } catch (error) {
-    console.error('Error fetching meter readings:', error);
+    console.error('Error fetching meter readings for customer:', error);
     throw error;
   }
 };
