@@ -128,7 +128,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     }
   };
 
-  // Function to fetch total revenue
+  // Function to fetch total revenue (outstanding balance)
   const fetchTotalRevenue = async () => {
     try {
       const customersRef = collection(db, 'customers');
@@ -139,19 +139,23 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         
-        // Check if lastPaymentAmount exists and is a number
-        if (typeof data.lastPaymentAmount === 'number') {
-          // Convert negative payment to positive
-          const amount = data.lastPaymentAmount < 0 ? -data.lastPaymentAmount : data.lastPaymentAmount;
+        // Check if outstandingTotalBalance exists
+        if (data.outstandingTotalBalance && data.outstandingTotalBalance !== 'N/A') {
+          // Convert to number if it's a string
+          const amount = typeof data.outstandingTotalBalance === 'string' 
+            ? parseFloat(data.outstandingTotalBalance.replace(/[^0-9.-]/g, ''))
+            : data.outstandingTotalBalance;
           
-          totalRevenue += amount;
-          
-          console.log('Added payment:', {
-            accountNumber: data.accountNumber,
-            originalAmount: data.lastPaymentAmount,
-            convertedAmount: amount,
-            runningTotal: totalRevenue
-          });
+          if (!isNaN(amount)) {
+            totalRevenue += amount;
+            
+            console.log('Added outstanding balance:', {
+              accountNumber: data.accountNumber,
+              originalValue: data.outstandingTotalBalance,
+              parsedAmount: amount,
+              runningTotal: totalRevenue
+            });
+          }
         }
       });
 
@@ -160,7 +164,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
         totalAccounts: querySnapshot.size
       });
 
-      // Update stats data with positive values
+      // Update stats data
       setStatsData(prevStats => prevStats.map(stat => 
         stat.title === "Total Revenue" 
           ? {
@@ -169,7 +173,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
               })}`,
-              change: 0 // Since we're not tracking monthly changes anymore
+              change: 0 // Since we're not tracking monthly changes
             }
           : stat
       ));
@@ -188,10 +192,135 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     }
   };
 
-  // Fetch both active users and total revenue when component mounts
+  // Function to fetch total payments
+  const fetchTotalPayments = async () => {
+    try {
+      const customersRef = collection(db, 'customers');
+      const querySnapshot = await getDocs(customersRef);
+      
+      let totalPayments = 0;
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        // Check if lastPaymentAmount exists and is a number
+        if (typeof data.lastPaymentAmount === 'number') {
+          // Convert negative payment to positive
+          const amount = data.lastPaymentAmount < 0 ? -data.lastPaymentAmount : data.lastPaymentAmount;
+          
+          totalPayments += amount;
+          
+          console.log('Added payment:', {
+            accountNumber: data.accountNumber,
+            originalAmount: data.lastPaymentAmount,
+            convertedAmount: amount,
+            runningTotal: totalPayments
+          });
+        }
+      });
+
+      console.log('Final payments calculation:', {
+        totalPayments,
+        totalAccounts: querySnapshot.size
+      });
+
+      // Update stats data with positive values
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Payments" 
+          ? {
+              ...stat,
+              value: `R${totalPayments.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })}`,
+              change: 0 // Since we're not tracking monthly changes
+            }
+          : stat
+      ));
+
+    } catch (error) {
+      console.error('Error fetching total payments:', error);
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Payments" 
+          ? {
+              ...stat,
+              value: "Error",
+              change: 0
+            }
+          : stat
+      ));
+    }
+  };
+
+  // Function to fetch total meters consumption
+  const fetchTotalMeters = async () => {
+    try {
+      // Get reference to the meter readings collection for September 2024
+      const meterReadingsRef = collection(db, 'meterReadings', '2024', '09');
+      const querySnapshot = await getDocs(meterReadingsRef);
+      
+      let totalConsumption = 0;
+      let previousTotal = 0;
+      let processedMeters = 0;
+      
+      for (const customerDoc of querySnapshot.docs) {
+        const data = customerDoc.data();
+        
+        // Check if Consumption exists and is a number
+        if (typeof data.Consumption === 'number') {
+          totalConsumption += data.Consumption;
+          processedMeters++;
+          
+          console.log('Added consumption:', {
+            customerNumber: customerDoc.id,
+            consumption: data.Consumption,
+            runningTotal: totalConsumption
+          });
+        }
+      }
+
+      console.log('Final meter calculation:', {
+        totalConsumption,
+        processedMeters,
+        totalDocuments: querySnapshot.size
+      });
+
+      // Update stats data
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Meters" 
+          ? {
+              ...stat,
+              value: totalConsumption.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }) + " kWh", // Added kWh unit since this is consumption
+              change: previousTotal > 0 
+                ? Number(((totalConsumption - previousTotal) / previousTotal * 100).toFixed(1))
+                : 0
+            }
+          : stat
+      ));
+
+    } catch (error) {
+      console.error('Error fetching total meters:', error);
+      setStatsData(prevStats => prevStats.map(stat => 
+        stat.title === "Total Meters" 
+          ? {
+              ...stat,
+              value: "Error",
+              change: 0
+            }
+          : stat
+      ));
+    }
+  };
+
+  // Fetch data when component mounts
   useEffect(() => {
     fetchActiveUsers();
     fetchTotalRevenue();
+    fetchTotalPayments();
+    fetchTotalMeters();
   }, []);
 
   return (
