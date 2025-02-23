@@ -118,18 +118,13 @@ function App() {
     }
   };
 
-  const handleLoginSuccess = async (email: string) => {
-    console.log('Login success for:', email);
-    toast.success('Logged in successfully');
+  const handleLoginSuccess = (email: string) => {
+    setIsLoggedIn(true);
+    console.log('Login successful:', email);
   };
 
-  const handleNewUserSignup = async (email: string, name: string) => {
+  const handleNewUserSignup = (email: string, name: string) => {
     console.log('New user signup:', email, name);
-  };
-
-  const handleHelpClick = () => {
-    // Placeholder for help button click handler
-    toast.success('Help functionality coming soon!');
   };
 
   const LandingPage = () => (
@@ -139,7 +134,7 @@ function App() {
           onLoginSuccess={handleLoginSuccess}
           onNewUserSignup={handleNewUserSignup}
         />
-        <FloatingHelpButton onClick={handleHelpClick} />
+        <FloatingHelpButton onClick={() => {}} />
         <main className="flex flex-col min-h-screen">
           <Hero />
           <Features />

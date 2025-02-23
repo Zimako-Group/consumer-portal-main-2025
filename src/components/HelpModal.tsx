@@ -84,24 +84,30 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               {/* Content */}
               <div className="p-4 space-y-3">
                 <h2 className="text-lg font-semibold text-white">
-                  We want to help!
+                  Welcome to the Mohokare Consumer Portal!
                 </h2>
                 <div className="space-y-2 text-sm text-gray-300">
                   <p>
-                    We want Windsurf to be as fast, reliable, and helpful to you as possible. We are working night and day to improve your experience.
+                    We're excited to have you here. To get started, follow these simple steps:
                   </p>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Click the <b>Get Started</b> button on the main page.</li>
+                    <li>Navigate to the <b>Sign Up</b> page.</li>
+                    <li>Fill in your details in the required fields.</li>
+                    <li>In the <b>Account Number</b> section, enter your Municipality Account Number.</li>
+                    <li>Click <b>Sign Up</b>, and the system will automatically log you into your customer dashboard.</li>
+                  </ol>
                   <p>
-                    Sometimes errors are part of a finder's research and planning process. Just like a human learning a new computer environment, what files exist, what tools are available, and so on.
-                  </p>
-                  <p>
-                    Don't worry! Windsurf can fall due to rate limits and availability issues outside of our control. Check our status page for more information.
+                    If you need assistance, feel free to reach out to our support team.
                   </p>
                 </div>
 
                 {/* Signature */}
-                <div className="mt-3 pt-2 border-t border-gray-700">
-                  <p className="text-sm text-gray-400 text-right italic">
-                    - Zimako Dev Team
+                <div className="mt-4 pt-3 border-t border-gray-700">
+                  <p className="text-right">
+                    <span className="inline-block font-['Dancing_Script'] text-lg text-blue-400 italic transform -rotate-2 hover:rotate-0 transition-transform duration-300 cursor-default">
+                      — Zimako Dev Team
+                    </span>
                   </p>
                 </div>
               </div>

@@ -12,7 +12,6 @@ const FloatingHelpButton: React.FC<FloatingHelpButtonProps> = ({ onClick }) => {
 
   const handleClick = () => {
     setIsModalOpen(true);
-    onClick();
   };
 
   return (
