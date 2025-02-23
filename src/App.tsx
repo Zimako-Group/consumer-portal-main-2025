@@ -31,6 +31,7 @@ const PaymentConfirmation = lazy(() => import('./components/PaymentConfirmation'
 const TrainingPage = lazy(() => import('./pages/train-model'));
 const ModelTester = lazy(() => import('./chatbot-data/ModelTester'));
 const ChatInterface = lazy(() => import('./chatbot-data/ChatInterface'));
+const FloatingHelpButton = lazy(() => import('./components/FloatingHelpButton'));
 
 interface User {
   email: string;
@@ -126,6 +127,11 @@ function App() {
     console.log('New user signup:', email, name);
   };
 
+  const handleHelpClick = () => {
+    // Placeholder for help button click handler
+    toast.success('Help functionality coming soon!');
+  };
+
   const LandingPage = () => (
     <Suspense fallback={<LoadingSpinner />}>
       <>
@@ -133,6 +139,7 @@ function App() {
           onLoginSuccess={handleLoginSuccess}
           onNewUserSignup={handleNewUserSignup}
         />
+        <FloatingHelpButton onClick={handleHelpClick} />
         <main className="flex flex-col min-h-screen">
           <Hero />
           <Features />
@@ -140,6 +147,10 @@ function App() {
           <QuerySection />
           <SecuritySection />
           <CTASection />
+          <FAQ />
+          <Contact />
+          <About />
+          <FooterService />
           <Footer />
           <ScrollToTop />
         </main>
