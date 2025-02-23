@@ -15,10 +15,28 @@ export default {
           '0%, 100%': { transform: 'rotate(0deg)' },
           '25%': { transform: 'rotate(-5deg)' },
           '75%': { transform: 'rotate(5deg)' }
+        },
+        'ripple-1': {
+          '0%': { transform: 'scale(0.8)', opacity: 0.25 },
+          '50%': { transform: 'scale(2.0)', opacity: 0.15 },
+          '100%': { transform: 'scale(3.0)', opacity: 0 }
+        },
+        'ripple-2': {
+          '0%': { transform: 'scale(0.8)', opacity: 0.25 },
+          '50%': { transform: 'scale(2.0)', opacity: 0.15 },
+          '100%': { transform: 'scale(3.0)', opacity: 0 }
+        },
+        'ripple-3': {
+          '0%': { transform: 'scale(0.8)', opacity: 0.25 },
+          '50%': { transform: 'scale(2.0)', opacity: 0.15 },
+          '100%': { transform: 'scale(3.0)', opacity: 0 }
         }
       },
       animation: {
-        shake: 'shake 0.5s ease-in-out'
+        shake: 'shake 0.5s ease-in-out',
+        'ripple-1': 'ripple-1 3s infinite ease-out',
+        'ripple-2': 'ripple-2 3s infinite ease-out 1s',
+        'ripple-3': 'ripple-3 3s infinite ease-out 2s'
       },
       colors: {
         theme: {

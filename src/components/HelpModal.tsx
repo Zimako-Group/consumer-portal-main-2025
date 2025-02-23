@@ -98,7 +98,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                     <li>Click <b>Sign Up</b>, and the system will automatically log you into your customer dashboard.</li>
                   </ol>
                   <p>
-                    If you need assistance, feel free to reach out to our support team.
+                    If you need assistance, feel free to reach out to our support team!
                   </p>
                 </div>
 
