@@ -8,8 +8,8 @@ interface HelpModalProps {
 }
 
 const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
-  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const modalRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -28,95 +28,85 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    const updatePosition = () => {
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      
-      // Position modal near the help button for larger screens
-      if (viewportWidth > 768) {
-        setModalPosition({
-          x: viewportWidth - 420, // 400px width + 20px margin
-          y: viewportHeight - 420 // Position from bottom
-        });
-      } else {
-        // Center modal for mobile screens
-        setModalPosition({
-          x: viewportWidth / 2,
-          y: viewportHeight / 2
-        });
-      }
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
     };
-
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop - only show on mobile */}
+          {/* Backdrop */}
           <motion.div
-            className="md:hidden fixed inset-0 bg-black/30 z-50"
+            className="fixed inset-0 bg-black/30 z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
           
-          {/* Modal */}
-          <motion.div
-            ref={modalRef}
-            className="fixed z-50 w-[90vw] md:w-[400px] bg-gray-900 text-white rounded-lg shadow-2xl overflow-hidden"
-            style={{
-              top: window.innerWidth > 768 ? 'auto' : '50%',
-              bottom: window.innerWidth > 768 ? '100px' : 'auto',
-              left: window.innerWidth > 768 ? 'auto' : '50%',
-              right: window.innerWidth > 768 ? '40px' : 'auto',
-              transform: window.innerWidth > 768 
-                ? 'none'
-                : 'translate(-50%, -50%)'
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors"
-              aria-label="Close"
+          {/* Modal Container - ensures proper mobile positioning */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Modal */}
+            <motion.div
+              ref={modalRef}
+              className={`
+                bg-gray-900 text-white rounded-lg shadow-2xl overflow-hidden
+                ${isMobile 
+                  ? 'w-full max-h-[calc(100vh-2rem)]' 
+                  : 'w-[400px]'
+                }
+              `}
+              style={!isMobile ? {
+                position: 'fixed',
+                bottom: '100px',
+                right: '40px',
+              } : undefined}
+              initial={isMobile ? { opacity: 0, y: 50 } : { opacity: 0, y: 20 }}
+              animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
+              exit={isMobile ? { opacity: 0, y: 50 } : { opacity: 0, y: 20 }}
+              transition={{ duration: 0.2 }}
             >
-              <XMarkIcon className="w-5 h-5" />
-            </button>
+              {/* Close button */}
+              <button
+                onClick={onClose}
+                className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors"
+                aria-label="Close"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
 
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <h2 className="text-xl font-semibold text-white">
-                We want to help!
-              </h2>
-              <div className="space-y-3 text-sm text-gray-300">
-                <p>
-                  We want Windsurf to be as fast, reliable, and helpful to you as possible. We are working night and day to improve your experience.
-                </p>
-                <p>
-                  Sometimes errors are part of a finder's research and planning process. Just like a human learning a new computer environment, what files exist, what tools are available, and so on.
-                </p>
-                <p>
-                  Don't worry! Windsurf can fall due to rate limits and availability issues outside of our control. Check our status page for more information.
-                </p>
-              </div>
+              {/* Content */}
+              <div className="p-4 space-y-3">
+                <h2 className="text-lg font-semibold text-white">
+                  We want to help!
+                </h2>
+                <div className="space-y-2 text-sm text-gray-300">
+                  <p>
+                    We want Windsurf to be as fast, reliable, and helpful to you as possible. We are working night and day to improve your experience.
+                  </p>
+                  <p>
+                    Sometimes errors are part of a finder's research and planning process. Just like a human learning a new computer environment, what files exist, what tools are available, and so on.
+                  </p>
+                  <p>
+                    Don't worry! Windsurf can fall due to rate limits and availability issues outside of our control. Check our status page for more information.
+                  </p>
+                </div>
 
-              {/* Signature */}
-              <div className="mt-4 pt-3 border-t border-gray-700">
-                <p className="text-sm text-gray-400 text-right italic">
-                  - Windsurf Dev Team
-                </p>
+                {/* Signature */}
+                <div className="mt-3 pt-2 border-t border-gray-700">
+                  <p className="text-sm text-gray-400 text-right italic">
+                    - Windsurf Dev Team
+                  </p>
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
