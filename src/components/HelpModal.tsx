@@ -101,7 +101,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 {/* Signature */}
                 <div className="mt-3 pt-2 border-t border-gray-700">
                   <p className="text-sm text-gray-400 text-right italic">
-                    - Windsurf Dev Team
+                    - Zimako Dev Team
                   </p>
                 </div>
               </div>
