@@ -22,6 +22,7 @@ import jellyfishBg from '../assets/jellyfish-bg.svg';
 import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import '../styles/dashboard.css';
+import ReportsLayout from './ReportsLayout';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -44,14 +45,14 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
-      title: "Total Outstanding Revenue",
+      title: "Book Value",
       value: "Loading...",
       change: 0,
       icon: <DollarSign className="text-blue-500" size={24} />,
       iconBgColor: "bg-blue-100 dark:bg-blue-900/20"
     },
     {
-      title: "Active Users",
+      title: "Active Accounts",
       value: "Loading...",
       change: 0,
       icon: <Users className="text-purple-500" size={24} />,
@@ -113,7 +114,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 
       // Update stats data
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Active Users" 
+        stat.title === "Active Accounts" 
           ? {
               ...stat,
               value: currentActiveUsers.toLocaleString(),
@@ -126,7 +127,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
       console.error('Error fetching active users:', error);
       // Update with error state
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Active Users" 
+        stat.title === "Active Accounts" 
           ? {
               ...stat,
               value: "Error",
@@ -175,7 +176,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
 
       // Update stats data
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Total Outstanding Revenue" 
+        stat.title === "Book Value" 
           ? {
               ...stat,
               value: `R${totalRevenue.toLocaleString(undefined, {
@@ -190,7 +191,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     } catch (error) {
       console.error('Error fetching total revenue:', error);
       setStatsData(prevStats => prevStats.map(stat => 
-        stat.title === "Total Outstanding Revenue" 
+        stat.title === "Book Value" 
           ? {
               ...stat,
               value: "Error",
@@ -344,39 +345,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
             {currentView === 'changelog' ? (
               <ChangeLog />
             ) : currentView === 'reports' ? (
-              <div className="p-8">
-                <div className="mb-8">
-                  <h1 className="text-2xl font-bold mb-2 dark:text-white text-black">Reports</h1>
-                  <p className="text-gray-600 dark:text-white text-black">
-                    Upload and manage CSM reports
-                  </p>
-                </div>
-                <div className="space-y-8">
-                  {/* CSM Balance Report Section */}
-                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload CSM Balance Report</h2>
-                    <CsmBalanceReportUpload />
-                  </div>
-
-                  {/* Meter Readings Report Section */}
-                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload CSM Meter Readings Report</h2>
-                    <MeterReadingsUpload />
-                  </div>
-
-                  {/* Detailed Aged Analysis Section */}
-                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload Detailed Aged Analysis</h2>
-                    <DetailedAgedAnalysisUpload />
-                  </div>
-
-                  {/* Detailed Levied Upload Section */}
-                  <div className="bg-white dark:bg-dark-card rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white text-black">Upload Detailed Levied</h2>
-                    <DetailedLeviedUpload />
-                  </div>
-                </div>
-              </div>
+              <ReportsLayout />
             ) : currentView === 'customerdashboard' ? (
               <CustomerDashboard onLogout={onLogout} />
             ) : currentView === 'queries' ? (
@@ -397,12 +366,12 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               </div>
             ) : (
               // Dashboard View with new greeting and stats cards
-              <div className="flex flex-col items-center justify-center min-h-[80vh] p-8">
-                <div className="text-center mb-16">
-                  <h1 className="text-5xl md:text-7xl font-playfair mb-4 bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent animate-fade-in">
+              <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">
+                <div className="text-center mb-12">
+                  <h1 className="text-4xl md:text-6xl font-playfair mb-4 bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent animate-fade-in">
                     {getGreeting()},
                   </h1>
-                  <h2 className="text-4xl md:text-6xl font-playfair text-gray-800 dark:text-gray-200 animate-fade-in-delayed">
+                  <h2 className="text-3xl md:text-5xl font-playfair text-gray-800 dark:text-gray-200 animate-fade-in-delayed">
                     {userData?.fullName || userData?.name || (currentUser?.email?.split('@')[0]?.split('.')?.[0] + ' ' + currentUser?.email?.split('@')[0]?.split('.')?.[1])?.replace(/\b\w/g, l => l.toUpperCase()) || 'Super Admin'}
                   </h2>
                   <p className="mt-8 text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto animate-fade-in-delayed leading-relaxed">
