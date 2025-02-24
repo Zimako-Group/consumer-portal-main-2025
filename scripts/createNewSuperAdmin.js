@@ -21,9 +21,9 @@ const db = getFirestore(app);
 
 // Super admin details - replace these values
 const newSuperAdmin = {
-  email: "tshepangsa@zimako.co.za",
-  password: "832287767@Tj",
-  fullName: "Tshepang Sambo"
+  email: "pumlamaphisa@aol.com",
+  password: "0633484884!Pm",
+  fullName: "Pumla Maphisa"
 };
 
 // Password validation
