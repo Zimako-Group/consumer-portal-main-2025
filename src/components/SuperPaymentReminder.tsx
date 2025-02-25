@@ -4,7 +4,7 @@ import { db } from '../firebaseConfig';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Search, Mail, MessageSquare, Phone, Bell, Calendar, Clock, X, Plus, Edit, Trash } from 'lucide-react';
+import { Search, Mail, MessageSquare, Phone, Bell, Calendar, Clock, X, Plus, Edit, Trash, CheckCircle, XCircle } from 'lucide-react';
 import { sendSMSAndRecord, sendEmailAndRecord } from '../services/communicationService';
 import { useAuth } from '../contexts/AuthContext';
 import { updateCommunicationStats } from '../services/communicationService';
@@ -36,7 +36,7 @@ interface ReminderData {
   message: string;
   timestamp: Timestamp;
   scheduledDate: Timestamp;
-  status: 'pending' | 'sent';
+  status: 'pending' | 'sent' | 'failed';
   accountNumber?: string;
   customerName?: string;
   channel?: 'sms' | 'email' | 'whatsapp';
@@ -47,6 +47,14 @@ interface ReminderData {
   amount?: number;
   success?: boolean;
   errorMessage?: string;
+  batchId?: string;
+}
+
+interface BatchProgress {
+  total: number;
+  sent: number;
+  failed: number;
+  inProgress: boolean;
 }
 
 interface TemplateMessage {
@@ -60,7 +68,8 @@ interface TemplateMessage {
 
 const SuperPaymentReminder: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const [selectedAccount, setSelectedAccount] = useState('');
+  const { currentUser } = useAuth();
+  const [selectedAccounts, setSelectedAccounts] = useState<CustomerData[]>([]);
   const [message, setMessage] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -71,7 +80,6 @@ const SuperPaymentReminder: React.FC = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateMessage | null>(null);
   const [searchResults, setSearchResults] = useState<CustomerData[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<TemplateMessage[]>([]);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
@@ -80,13 +88,27 @@ const SuperPaymentReminder: React.FC = () => {
     content: ''
   });
   const [editingTemplate, setEditingTemplate] = useState<TemplateMessage | null>(null);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress>({
+    total: 0,
+    sent: 0,
+    failed: 0,
+    inProgress: false
+  });
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<CustomerData[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [selectedFilters, setSelectedFilters] = useState({
+    accountStatus: '',
+    accountType: '',
+    balanceAbove: 0,
+  });
 
   useEffect(() => {
     fetchReminders();
   }, []);
 
   useEffect(() => {
-    if (!selectedAccount) {
+    if (!searchTerm) {
       setSearchResults([]);
       return;
     }
@@ -95,7 +117,7 @@ const SuperPaymentReminder: React.FC = () => {
       setIsSearching(true);
       try {
         const customersRef = collection(db, 'customers');
-        const searchTermLower = selectedAccount.toLowerCase();
+        const searchTermLower = searchTerm.toLowerCase();
         
         const snapshot = await getDocs(customersRef);
         const results = snapshot.docs
@@ -116,7 +138,7 @@ const SuperPaymentReminder: React.FC = () => {
 
     const timeoutId = setTimeout(searchCustomers, 300);
     return () => clearTimeout(timeoutId);
-  }, [selectedAccount]);
+  }, [searchTerm]);
 
   useEffect(() => {
     const fetchCustomTemplates = async () => {
@@ -139,14 +161,19 @@ const SuperPaymentReminder: React.FC = () => {
   }, []);
 
   const handleCustomerSelect = (customer: CustomerData) => {
-    setSelectedCustomer(customer);
-    setSelectedAccount(customer.accountHolderName);
+    setSelectedAccounts(prev => {
+      const exists = prev.find(c => c.accountNumber === customer.accountNumber);
+      if (exists) {
+        return prev.filter(c => c.accountNumber !== customer.accountNumber);
+      }
+      return [...prev, customer];
+    });
     setSearchResults([]);
   };
 
-  const clearSelectedCustomer = () => {
-    setSelectedCustomer(null);
-    setSelectedAccount('');
+  const clearSelectedCustomers = () => {
+    setSelectedAccounts([]);
+    setSearchTerm('');
   };
 
   const fetchReminders = async () => {
@@ -173,25 +200,13 @@ const SuperPaymentReminder: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedCustomer) {
-      toast.error('Please select a customer first');
+    if (selectedAccounts.length === 0) {
+      toast.error('Please select at least one customer');
       return;
     }
 
     if (!selectedChannel) {
       toast.error('Please select a communication channel (SMS, Email, or WhatsApp)');
-      return;
-    }
-
-    if (selectedChannel === 'email' && (!selectedCustomer.emailAddress || selectedCustomer.emailAddress === 'N/A')) {
-      toast.error('Selected customer does not have a valid email address');
-      return;
-    }
-
-    if (selectedChannel === 'sms' && 
-        (!selectedCustomer.communicationPreferences?.sms?.enabled || 
-         !selectedCustomer.cellNumber)) {
-      toast.error('Selected customer does not have a valid phone number');
       return;
     }
 
@@ -207,6 +222,8 @@ const SuperPaymentReminder: React.FC = () => {
 
     try {
       setLoading(true);
+      setBatchProgress({ total: selectedAccounts.length, sent: 0, failed: 0, inProgress: true });
+      
       const scheduledDateTime = new Date(scheduledDate + 'T' + scheduledTime);
       
       if (scheduledDateTime < new Date()) {
@@ -214,51 +231,82 @@ const SuperPaymentReminder: React.FC = () => {
         return;
       }
 
-      // Store the reminder in Firestore with pending status for scheduled delivery
-      const reminderData = {
-        message,
-        timestamp: Timestamp.now(),
-        scheduledDate: Timestamp.fromDate(scheduledDateTime),
-        status: 'pending', // Set as pending for scheduled messages
-        channel: selectedChannel,
-        accountNumber: selectedCustomer.accountNumber,
-        customerName: selectedCustomer.accountHolderName,
-        contactInfo: selectedChannel === 'email' 
-          ? selectedCustomer.emailAddress 
-          : selectedCustomer.cellNumber,
-        department: 'billing',
-        purpose: 'payment_reminder',
-        amount: selectedCustomer.outstandingTotalBalance,
-        success: null,
-        errorMessage: null
-      };
+      const batchId = Date.now().toString();
+      let successCount = 0;
+      let failedCount = 0;
 
-      await addDoc(collection(db, 'paymentReminders'), reminderData);
-      
-      toast.success(`Reminder scheduled for ${scheduledDateTime.toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}`);
+      // Process each customer in the batch
+      for (const customer of selectedAccounts) {
+        // Validate contact info
+        if (selectedChannel === 'email' && (!customer.emailAddress || customer.emailAddress === 'N/A')) {
+          failedCount++;
+          continue;
+        }
+
+        if (selectedChannel === 'sms' && 
+            (!customer.communicationPreferences?.sms?.enabled || 
+             !customer.cellNumber)) {
+          failedCount++;
+          continue;
+        }
+
+        // Create reminder data
+        const reminderData = {
+          message: message.replace('{name}', customer.accountHolderName)
+                         .replace('{amount}', customer.outstandingTotalBalance.toFixed(2))
+                         .replace('{account}', customer.accountNumber),
+          timestamp: Timestamp.now(),
+          scheduledDate: Timestamp.fromDate(scheduledDateTime),
+          status: 'pending',
+          channel: selectedChannel,
+          accountNumber: customer.accountNumber,
+          customerName: customer.accountHolderName,
+          contactInfo: selectedChannel === 'email' 
+            ? customer.emailAddress 
+            : customer.cellNumber,
+          department: 'billing',
+          purpose: 'payment_reminder',
+          amount: customer.outstandingTotalBalance,
+          success: null,
+          errorMessage: null,
+          batchId
+        };
+
+        try {
+          await addDoc(collection(db, 'paymentReminders'), reminderData);
+          successCount++;
+          setBatchProgress(prev => ({ ...prev, sent: prev.sent + 1 }));
+        } catch (error) {
+          failedCount++;
+          setBatchProgress(prev => ({ ...prev, failed: prev.failed + 1 }));
+          console.error(`Failed to schedule reminder for ${customer.accountNumber}:`, error);
+        }
+      }
+
+      toast.success(`Batch scheduled: ${successCount} successful, ${failedCount} failed`);
       
       // Reset form
       setMessage('');
       setScheduledDate('');
       setScheduledTime('');
       setSelectedChannel(null);
-      setSelectedCustomer(null);
-      setSelectedAccount('');
+      clearSelectedCustomers();
       
       fetchReminders();
     } catch (error) {
-      console.error('Error scheduling reminder:', error);
-      toast.error(`Failed to schedule reminder: ${error.message}`);
+      console.error('Error scheduling batch reminders:', error);
+      toast.error(`Failed to schedule batch reminders: ${error.message}`);
     } finally {
       setLoading(false);
+      setBatchProgress(prev => ({ ...prev, inProgress: false }));
     }
   };
 
   const getChannelButtonClass = (channel: 'sms' | 'email' | 'whatsapp') => {
     const isDisabled = channel === 'email' 
-      ? !selectedCustomer?.emailAddress || selectedCustomer?.emailAddress === 'N/A'
+      ? !selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')
       : channel === 'sms'
-      ? !selectedCustomer?.communicationPreferences?.sms?.enabled
+      ? !selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled && customer.cellNumber)
       : false;
 
     return `flex flex-col items-center p-4 bg-[#2a334d] rounded-lg border ${
@@ -298,22 +346,22 @@ const SuperPaymentReminder: React.FC = () => {
     {
       id: 'payment-due',
       title: 'Payment Due Reminder',
-      content: `Dear ${selectedCustomer?.accountHolderName},\n\nThis is a friendly reminder that your outstanding balance of R${selectedCustomer?.outstandingTotalBalance.toFixed(2)} is due for payment.\n\nPlease make the payment at your earliest convenience.\n\nThank you for your cooperation.`
+      content: `Dear {name},\n\nThis is a friendly reminder that your outstanding balance of R{amount} is due for payment.\n\nPlease make the payment at your earliest convenience.\n\nThank you for your cooperation.`
     },
     {
       id: 'payment-overdue',
       title: 'Payment Overdue Notice',
-      content: `Dear ${selectedCustomer?.accountHolderName},\n\nYour account (${selectedCustomer?.accountNumber}) has an outstanding balance of R${selectedCustomer?.outstandingTotalBalance.toFixed(2)}.\n\nPlease settle this amount as soon as possible to avoid any service interruptions.\n\nIf you have already made the payment, please disregard this notice.`
+      content: `Dear {name},\n\nYour account ({account}) has an outstanding balance of R{amount}.\n\nPlease settle this amount as soon as possible to avoid any service interruptions.\n\nIf you have already made the payment, please disregard this notice.`
     },
     {
       id: 'payment-urgent',
       title: 'Urgent Payment Required',
-      content: `Dear ${selectedCustomer?.accountHolderName},\n\nYour account requires immediate attention. The outstanding balance of R${selectedCustomer?.outstandingTotalBalance.toFixed(2)} needs to be settled urgently.\n\nPlease contact our office if you need to discuss payment arrangements.`
+      content: `Dear {name},\n\nYour account requires immediate attention. The outstanding balance of R{amount} needs to be settled urgently.\n\nPlease contact our office if you need to discuss payment arrangements.`
     },
     {
       id: 'payment-arrangement',
       title: 'Payment Arrangement Reminder',
-      content: `Dear ${selectedCustomer?.accountHolderName},\n\nAs per our payment arrangement, please remember to settle the amount of R${selectedCustomer?.outstandingTotalBalance.toFixed(2)}.\n\nYour last payment of R${selectedCustomer?.lastPaymentAmount.toFixed(2)} was received on ${formatDateWithSlashes(selectedCustomer?.lastPaymentDate)}.\n\nThank you for your commitment to maintaining your account.`
+      content: `Dear {name},\n\nAs per our payment arrangement, please remember to settle the amount of R{amount}.\n\nYour last payment of R${selectedAccounts[0]?.lastPaymentAmount.toFixed(2)} was received on ${formatDateWithSlashes(selectedAccounts[0]?.lastPaymentDate)}.\n\nThank you for your commitment to maintaining your account.`
     }
   ];
 
@@ -391,109 +439,270 @@ const SuperPaymentReminder: React.FC = () => {
     }
   };
 
+  const fetchAllCustomers = async () => {
+    setIsLoadingCustomers(true);
+    try {
+      const customersRef = collection(db, 'customers');
+      const snapshot = await getDocs(customersRef);
+      const customers = snapshot.docs.map(doc => doc.data() as CustomerData);
+      setAllCustomers(customers);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      toast.error('Failed to fetch customers');
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  };
+
+  const handleBulkSelection = () => {
+    let filteredCustomers = [...allCustomers];
+    
+    // Apply filters
+    if (selectedFilters.accountStatus) {
+      filteredCustomers = filteredCustomers.filter(
+        customer => customer.accountStatus === selectedFilters.accountStatus
+      );
+    }
+    
+    if (selectedFilters.accountType) {
+      filteredCustomers = filteredCustomers.filter(
+        customer => customer.accountType === selectedFilters.accountType
+      );
+    }
+    
+    if (selectedFilters.balanceAbove > 0) {
+      filteredCustomers = filteredCustomers.filter(
+        customer => customer.outstandingTotalBalance >= selectedFilters.balanceAbove
+      );
+    }
+    
+    // Only select customers with valid SMS preferences
+    const validCustomers = filteredCustomers.filter(
+      customer => customer.communicationPreferences?.sms?.enabled && customer.cellNumber
+    );
+    
+    setSelectedAccounts(validCustomers);
+    if (validCustomers.length < filteredCustomers.length) {
+      toast.warning(`${filteredCustomers.length - validCustomers.length} customers were excluded due to invalid SMS preferences`);
+    }
+    toast.success(`Selected ${validCustomers.length} customers for bulk SMS`);
+  };
+
+  const BulkSelectionHeader: React.FC<{
+    selectedCount: number;
+    onClear: () => void;
+  }> = ({ selectedCount, onClear }) => (
+    <div className="flex justify-between items-center mb-4 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
+      <div className="flex items-center gap-2">
+        <CheckCircle className="text-[#ff6b00]" size={20} />
+        <span className="text-white font-medium">
+          {selectedCount} Customer{selectedCount !== 1 ? 's' : ''} Selected
+        </span>
+      </div>
+      <button
+        onClick={onClear}
+        className="px-3 py-1 text-sm bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+      >
+        Clear Selection
+      </button>
+    </div>
+  );
+
+  const ProgressTracker: React.FC<{
+    progress: BatchProgress;
+  }> = ({ progress }) => (
+    <div className="mb-6 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-white font-medium">Processing Batch</span>
+        <span className="text-gray-400">
+          {progress.sent + progress.failed} / {progress.total}
+        </span>
+      </div>
+      
+      {/* Progress Bar */}
+      <div className="w-full h-2 bg-gray-700 rounded-full mb-3">
+        <div
+          className="h-full bg-[#ff6b00] rounded-full transition-all duration-300"
+          style={{
+            width: `${((progress.sent + progress.failed) / progress.total) * 100}%`
+          }}
+        />
+      </div>
+      
+      {/* Stats */}
+      <div className="flex justify-between text-sm">
+        <div className="flex items-center gap-1">
+          <CheckCircle className="text-green-500" size={16} />
+          <span className="text-green-400">{progress.sent} Sent</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <XCircle className="text-red-500" size={16} />
+          <span className="text-red-400">{progress.failed} Failed</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const CustomerChip: React.FC<{
+    customer: CustomerData;
+    onRemove: (customer: CustomerData) => void;
+  }> = ({ customer, onRemove }) => (
+    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#2a334d] rounded-lg border border-gray-600 m-1">
+      <span className="text-sm text-white">{customer.accountHolderName}</span>
+      <span className="text-xs text-gray-400">{customer.accountNumber}</span>
+      <button
+        onClick={() => onRemove(customer)}
+        className="ml-1 text-gray-400 hover:text-white transition-colors"
+      >
+        ×
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col space-y-6 p-6">
       {/* Main Content Container */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column - Reminder Form */}
         <div className="bg-[#1a2234] rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-6">
-            Schedule Payment Reminder
-          </h2>
-          
-          {/* Search Input */}
-          <div className="relative mb-6">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search customer by name or account..."
-              className="w-full pl-10 pr-4 py-2.5 bg-[#2a334d] text-white rounded-lg border border-gray-600 focus:ring-2 focus:ring-[#ff6b00] focus:border-transparent placeholder-gray-400"
-              value={selectedAccount}
-              onChange={(e) => setSelectedAccount(e.target.value)}
-            />
-            {selectedCustomer && (
-              <button
-                onClick={clearSelectedCustomer}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-              >
-                <X size={16} />
-              </button>
-            )}
-            
-            {/* Search Results Dropdown */}
-            {searchResults.length > 0 && !selectedCustomer && (
-              <div className="absolute z-10 w-full mt-1 bg-[#2a334d] border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                {searchResults.map((customer, index) => (
-                  <button
-                    key={customer.accountNumber}
-                    onClick={() => handleCustomerSelect(customer)}
-                    className={`w-full text-left px-4 py-3 hover:bg-[#1a2234] text-white ${
-                      index !== searchResults.length - 1 ? 'border-b border-gray-600' : ''
-                    }`}
-                  >
-                    <div className="font-medium">{customer.accountHolderName}</div>
-                    <div className="text-sm text-gray-400">
-                      Account: {customer.accountNumber} • {customer.accountType}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-white">
+              Schedule Payment Reminder
+            </h2>
+            <button
+              onClick={() => {
+                setIsBulkMode(!isBulkMode);
+                if (!isBulkMode) {
+                  fetchAllCustomers();
+                } else {
+                  setSelectedAccounts([]);
+                }
+              }}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                isBulkMode 
+                  ? 'bg-[#ff6b00] text-white' 
+                  : 'bg-[#1a2234] text-gray-400 hover:text-white border border-gray-600'
+              }`}
+            >
+              {isBulkMode ? 'Exit Bulk Mode' : 'Bulk SMS Mode'}
+            </button>
           </div>
-
-          {/* Selected Customer Info */}
-          {selectedCustomer && (
-            <div className="bg-[#2a334d] p-4 rounded-lg mb-6 border border-gray-600">
-              <div className="flex justify-between items-start mb-2">
+          
+          {/* Bulk Mode UI */}
+          {isBulkMode && (
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">
-                    {selectedCustomer.accountHolderName}
-                  </h3>
-                  <p className="text-sm text-gray-400">
-                    Account: {selectedCustomer.accountNumber}
-                  </p>
+                  <label className="block text-gray-300 text-sm font-medium mb-2">
+                    Account Status
+                  </label>
+                  <select
+                    value={selectedFilters.accountStatus}
+                    onChange={(e) => setSelectedFilters(prev => ({
+                      ...prev,
+                      accountStatus: e.target.value
+                    }))}
+                    className="w-full p-2 bg-[#2a334d] text-white rounded-lg border border-gray-600"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs ${
-                  selectedCustomer.accountStatus === 'ACTIVE' 
-                    ? 'bg-green-900/50 text-green-400'
-                    : 'bg-red-900/50 text-red-400'
-                }`}>
-                  {selectedCustomer.accountStatus}
-                </span>
-              </div>
-              
-              {/* Contact Information */}
-              <div className="space-y-1 mb-4">
-                <p className="text-sm text-gray-400 flex items-center gap-2">
-                  <Phone className="text-[#ff6b00]" size={14} />
-                  Cell: {selectedCustomer.cellNumber}
-                </p>
-                <p className="text-sm text-gray-400 flex items-center gap-2">
-                  <Mail className="text-[#ff6b00]" size={14} />
-                  Email: {selectedCustomer.emailAddress || 'N/A'}
-                </p>
+
+                <div>
+                  <label className="block text-gray-300 text-sm font-medium mb-2">
+                    Account Type
+                  </label>
+                  <select
+                    value={selectedFilters.accountType}
+                    onChange={(e) => setSelectedFilters(prev => ({
+                      ...prev,
+                      accountType: e.target.value
+                    }))}
+                    className="w-full p-2 bg-[#2a334d] text-white rounded-lg border border-gray-600"
+                  >
+                    <option value="">All Types</option>
+                    <option value="personal">Personal</option>
+                    <option value="business">Business</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-gray-300 text-sm font-medium mb-2">
+                    Balance Above (R)
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedFilters.balanceAbove}
+                    onChange={(e) => setSelectedFilters(prev => ({
+                      ...prev,
+                      balanceAbove: parseFloat(e.target.value) || 0
+                    }))}
+                    className="w-full p-2 bg-[#2a334d] text-white rounded-lg border border-gray-600"
+                    min="0"
+                    step="100"
+                  />
+                </div>
               </div>
 
-              {/* Financial Information */}
-              <div className="border-t border-gray-600 pt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Outstanding Balance:</span>
-                  <span className="text-sm font-medium text-red-400">
-                    R {selectedCustomer.outstandingTotalBalance.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Last Payment:</span>
-                  <span className="text-sm font-medium text-green-400">
-                    R {selectedCustomer.lastPaymentAmount.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Payment Date:</span>
-                  <span className="text-sm text-gray-300">
-                    {formatDateWithSlashes(selectedCustomer?.lastPaymentDate)}
-                  </span>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">
+                  {isLoadingCustomers ? 'Loading customers...' : `${allCustomers.length} customers available`}
+                </span>
+                <button
+                  onClick={handleBulkSelection}
+                  disabled={isLoadingCustomers || allCustomers.length === 0}
+                  className="px-4 py-2 bg-[#ff6b00] text-white rounded-lg hover:bg-[#ff6b00]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Select Matching Customers
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Regular Search Input - Only show if not in bulk mode */}
+          {!isBulkMode && (
+            <div className="relative mb-6">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Search customer by name or account..."
+                className="w-full pl-10 pr-4 py-2.5 bg-[#2a334d] text-white rounded-lg border border-gray-600 focus:ring-2 focus:ring-[#ff6b00] focus:border-transparent placeholder-gray-400"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {selectedAccounts.length > 0 && (
+                <button
+                  onClick={clearSelectedCustomers}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Selected Customers Info */}
+          {selectedAccounts.length > 0 && (
+            <BulkSelectionHeader
+              selectedCount={selectedAccounts.length}
+              onClear={clearSelectedCustomers}
+            />
+          )}
+          
+          {/* Selected Customers */}
+          {selectedAccounts.length > 0 && (
+            <div className="mt-4">
+              <div className="flex flex-wrap gap-2">
+                {selectedAccounts.map(customer => (
+                  <CustomerChip
+                    key={customer.accountNumber}
+                    customer={customer}
+                    onRemove={handleCustomerSelect}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -502,57 +711,57 @@ const SuperPaymentReminder: React.FC = () => {
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
               onClick={() => {
-                if (selectedCustomer?.communicationPreferences?.sms?.enabled) {
+                if (selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled)) {
                   setSelectedChannel('sms');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('SMS communication is not enabled for this customer');
+                  toast.error('SMS communication is not enabled for all selected customers');
                 }
               }}
-              disabled={!selectedCustomer || !selectedCustomer.communicationPreferences?.sms?.enabled}
+              disabled={!selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled)}
               className={getChannelButtonClass('sms')}
             >
               <Phone className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">SMS</span>
-              {selectedCustomer && !selectedCustomer.communicationPreferences?.sms?.enabled && (
+              {!selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled) && (
                 <span className="text-xs text-gray-400 mt-1">Not available</span>
               )}
             </button>
 
             <button
               onClick={() => {
-                if (selectedCustomer?.emailAddress && selectedCustomer.emailAddress !== 'N/A') {
+                if (selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')) {
                   setSelectedChannel('email');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('Email communication is not available for this customer');
+                  toast.error('Email communication is not available for all selected customers');
                 }
               }}
-              disabled={!selectedCustomer || !selectedCustomer.emailAddress || selectedCustomer.emailAddress === 'N/A'}
+              disabled={!selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')}
               className={getChannelButtonClass('email')}
             >
               <Mail className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">Email</span>
-              {selectedCustomer && (!selectedCustomer.emailAddress || selectedCustomer.emailAddress === 'N/A') && (
+              {!selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A') && (
                 <span className="text-xs text-gray-400 mt-1">Not available</span>
               )}
             </button>
 
             <button
               onClick={() => {
-                if (selectedCustomer?.cellNumber) {
+                if (selectedAccounts.every(customer => customer.cellNumber)) {
                   setSelectedChannel('whatsapp');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('WhatsApp communication requires a valid phone number');
+                  toast.error('WhatsApp communication requires a valid phone number for all selected customers');
                 }
               }}
-              disabled={!selectedCustomer || !selectedCustomer.cellNumber}
+              disabled={!selectedAccounts.every(customer => customer.cellNumber)}
               className={getChannelButtonClass('whatsapp')}
             >
               <MessageSquare className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">WhatsApp</span>
-              {selectedCustomer && !selectedCustomer.cellNumber && (
+              {!selectedAccounts.every(customer => customer.cellNumber) && (
                 <span className="text-xs text-gray-400 mt-1">Not available</span>
               )}
             </button>
@@ -568,13 +777,13 @@ const SuperPaymentReminder: React.FC = () => {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className={`w-full p-3 bg-[#2a334d] text-white rounded-lg border ${
-                  !selectedCustomer 
+                  !selectedAccounts.length 
                     ? 'border-gray-600 opacity-50'
                     : 'border-gray-600 focus:ring-2 focus:ring-[#ff6b00] focus:border-transparent'
                 } placeholder-gray-400`}
                 rows={4}
-                placeholder={selectedCustomer ? "Enter your reminder message..." : "Select a customer first..."}
-                disabled={!selectedCustomer}
+                placeholder={selectedAccounts.length ? "Enter your reminder message..." : "Select customers first..."}
+                disabled={!selectedAccounts.length}
               />
             </div>
 
@@ -589,11 +798,11 @@ const SuperPaymentReminder: React.FC = () => {
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
                   className={`w-full p-2.5 bg-[#2a334d] text-white rounded-lg border ${
-                    !selectedCustomer 
+                    !selectedAccounts.length 
                       ? 'border-gray-600 opacity-50'
                       : 'border-gray-600 focus:ring-2 focus:ring-[#ff6b00] focus:border-transparent'
                   }`}
-                  disabled={!selectedCustomer}
+                  disabled={!selectedAccounts.length}
                 />
               </div>
               <div>
@@ -606,20 +815,20 @@ const SuperPaymentReminder: React.FC = () => {
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
                   className={`w-full p-2.5 bg-[#2a334d] text-white rounded-lg border ${
-                    !selectedCustomer 
+                    !selectedAccounts.length 
                       ? 'border-gray-600 opacity-50'
                       : 'border-gray-600 focus:ring-2 focus:ring-[#ff6b00] focus:border-transparent'
                   }`}
-                  disabled={!selectedCustomer}
+                  disabled={!selectedAccounts.length}
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={!selectedCustomer || loading}
+              disabled={!selectedAccounts.length || loading}
               className={`w-full bg-[#ff6b00] text-white py-2.5 px-4 rounded-lg transition-colors font-medium ${
-                !selectedCustomer || loading
+                !selectedAccounts.length || loading
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:bg-[#ff6b00]/90'
               }`}
@@ -665,6 +874,8 @@ const SuperPaymentReminder: React.FC = () => {
                   <span className={`px-2 py-1 text-xs rounded-full ${
                     reminder.status === 'sent'
                       ? 'bg-green-900 text-green-100'
+                      : reminder.status === 'failed'
+                      ? 'bg-red-900 text-red-100'
                       : 'bg-[#ff6b00] bg-opacity-20 text-[#ff6b00]'
                   }`}>
                     {reminder.status}
@@ -678,6 +889,11 @@ const SuperPaymentReminder: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Progress Tracker */}
+      {batchProgress.inProgress && (
+        <ProgressTracker progress={batchProgress} />
+      )}
 
       {/* Template Selection Modal */}
       {showTemplateModal && (
