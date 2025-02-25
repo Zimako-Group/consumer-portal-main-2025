@@ -106,6 +106,8 @@ const SuperPaymentReminder: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [sortedCustomers, setSortedCustomers] = useState<CustomerData[]>([]);
+  const [currentReminderPage, setCurrentReminderPage] = useState(1);
+  const [remindersPerPage] = useState(5);
 
   // Add this function near the top of the component, after the interfaces
   const formatCellNumber = (number: string | undefined | null): string => {
@@ -521,6 +523,14 @@ const SuperPaymentReminder: React.FC = () => {
     if (!searchTerm) return true;
     return reminder.message.toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  const paginatedReminders = filteredReminders.slice((currentReminderPage - 1) * remindersPerPage, currentReminderPage * remindersPerPage);
+
+  const totalReminderPages = Math.ceil(filteredReminders.length / remindersPerPage);
+
+  const handleReminderPageChange = (pageNumber: number) => {
+    setCurrentReminderPage(pageNumber);
+  };
 
   // Function to format date string from YYYYMMDD to YYYY/MM/DD
   const formatDateWithSlashes = (dateString: string | number | undefined) => {
@@ -1108,51 +1118,84 @@ const SuperPaymentReminder: React.FC = () => {
           <div className="space-y-4">
             {loading ? (
               <div className="text-center text-gray-400">Loading reminders...</div>
-            ) : filteredReminders.length === 0 ? (
+            ) : paginatedReminders.length === 0 ? (
               <div className="text-center text-gray-400">No reminders found</div>
             ) : (
-              filteredReminders.map((reminder) => {
-                // Convert Firestore Timestamp to Date
-                const scheduledDate = reminder.scheduledDate instanceof Timestamp 
-                  ? reminder.scheduledDate.toDate() 
-                  : new Date(reminder.scheduledDate);
+              <>
+                {paginatedReminders.map((reminder) => {
+                  const scheduledDate = reminder.scheduledDate instanceof Timestamp 
+                    ? reminder.scheduledDate.toDate() 
+                    : new Date(reminder.scheduledDate);
 
-                console.log('Rendering reminder:', {
-                  id: reminder.id,
-                  message: reminder.message,
-                  scheduledDate: scheduledDate,
-                  status: reminder.status
-                });
+                  return (
+                    <div
+                      key={reminder.id}
+                      className="p-4 bg-[#2a334d] rounded-lg border border-gray-600"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-white font-medium">{reminder.message}</span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          reminder.status === 'sent'
+                            ? 'bg-green-900 text-green-100'
+                            : reminder.status === 'failed'
+                            ? 'bg-red-900 text-red-100'
+                            : 'bg-[#ff6b00] bg-opacity-20 text-[#ff6b00]'
+                        }`}>
+                          {reminder.status}
+                        </span>
+                      </div>
+                      <div className="text-gray-400 text-sm">
+                        Scheduled for: {scheduledDate.toLocaleString()}
+                      </div>
+                      <div className="text-gray-400 text-sm mt-1">
+                        Customer: {reminder.customerName}
+                      </div>
+                      <div className="text-gray-400 text-sm">
+                        Contact: {reminder.contactInfo}
+                      </div>
+                    </div>
+                  );
+                })}
 
-                return (
-                  <div
-                    key={reminder.id}
-                    className="p-4 bg-[#2a334d] rounded-lg border border-gray-600"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-white font-medium">{reminder.message}</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        reminder.status === 'sent'
-                          ? 'bg-green-900 text-green-100'
-                          : reminder.status === 'failed'
-                          ? 'bg-red-900 text-red-100'
-                          : 'bg-[#ff6b00] bg-opacity-20 text-[#ff6b00]'
-                      }`}>
-                        {reminder.status}
-                      </span>
-                    </div>
-                    <div className="text-gray-400 text-sm">
-                      Scheduled for: {scheduledDate.toLocaleString()}
-                    </div>
-                    <div className="text-gray-400 text-sm mt-1">
-                      Customer: {reminder.customerName}
-                    </div>
-                    <div className="text-gray-400 text-sm">
-                      Contact: {reminder.contactInfo}
+                {/* Pagination Controls */}
+                {totalReminderPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 bg-[#2a334d] p-3 rounded-lg">
+                    <span className="text-sm text-gray-400">
+                      Showing {(currentReminderPage - 1) * remindersPerPage + 1}-
+                      {Math.min(currentReminderPage * remindersPerPage, filteredReminders.length)} of {filteredReminders.length} reminders
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleReminderPageChange(currentReminderPage - 1)}
+                        disabled={currentReminderPage === 1}
+                        className="px-3 py-1 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234]"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      {Array.from({ length: totalReminderPages }, (_, i) => i + 1).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          onClick={() => handleReminderPageChange(pageNum)}
+                          className={`px-3 py-1 rounded ${
+                            currentReminderPage === pageNum
+                              ? 'bg-[#ff6b00] text-white'
+                              : 'bg-[#1a2234] text-white hover:bg-[#3a435d]'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleReminderPageChange(currentReminderPage + 1)}
+                        disabled={currentReminderPage === totalReminderPages}
+                        className="px-3 py-1 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234]"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
                     </div>
                   </div>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         </div>
