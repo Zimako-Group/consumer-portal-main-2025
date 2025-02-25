@@ -230,24 +230,65 @@ export default function Statement() {
         </div>
 
         {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:shadow-md">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Outstanding Balance</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-              R {metrics.outstandingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-            </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+          <div className="group relative overflow-hidden bg-white dark:bg-gray-800 p-3 rounded-md border border-gray-200/50 dark:border-gray-700/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-red-500/10 dark:from-red-500/10 dark:to-red-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Outstanding Balance</p>
+                <div className="p-1.5 bg-red-500/10 rounded-md">
+                  <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+              </div>
+              <p className="text-lg font-bold text-gray-900 dark:text-white mb-0.5">
+                R {metrics.outstandingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+              </p>
+              <div className="flex items-center text-red-500 text-[10px] font-medium">
+                <span>Due Balance</span>
+              </div>
+            </div>
           </div>
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:shadow-md">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Total Credits</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-              R {metrics.totalCredits.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-            </p>
+
+          <div className="group relative overflow-hidden bg-white dark:bg-gray-800 p-3 rounded-md border border-gray-200/50 dark:border-gray-700/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-green-500/10 dark:from-green-500/10 dark:to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Credits</p>
+                <div className="p-1.5 bg-green-500/10 rounded-md">
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                  </svg>
+                </div>
+              </div>
+              <p className="text-lg font-bold text-gray-900 dark:text-white mb-0.5">
+                R {metrics.totalCredits.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+              </p>
+              <div className="flex items-center text-green-500 text-[10px] font-medium">
+                <span>Total Payments</span>
+              </div>
+            </div>
           </div>
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 transition-all hover:shadow-md">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Total Transactions</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">
-              {metrics.transactionCount}
-            </p>
+
+          <div className="group relative overflow-hidden bg-white dark:bg-gray-800 p-3 rounded-md border border-gray-200/50 dark:border-gray-700/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-500/10 dark:from-blue-500/10 dark:to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Transactions</p>
+                <div className="p-1.5 bg-blue-500/10 rounded-md">
+                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                  </svg>
+                </div>
+              </div>
+              <p className="text-lg font-bold text-gray-900 dark:text-white mb-0.5">
+                {metrics.transactionCount}
+              </p>
+              <div className="flex items-center text-blue-500 text-[10px] font-medium">
+                <span>Total Activities</span>
+              </div>
+            </div>
           </div>
         </div>
 
