@@ -355,11 +355,10 @@ const SuperPaymentReminder: React.FC = () => {
   };
 
   const getChannelButtonClass = (channel: 'sms' | 'email' | 'whatsapp') => {
-    const isDisabled = channel === 'email' 
-      ? !selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')
-      : channel === 'sms'
-      ? !selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled && customer.cellNumber)
-      : false;
+    const isDisabled = !selectedAccounts.some(customer => {
+      const availability = checkCustomerCommunication(customer);
+      return availability[channel];
+    });
 
     return `flex flex-col items-center p-4 bg-[#2a334d] rounded-lg border ${
       selectedChannel === channel
@@ -368,6 +367,41 @@ const SuperPaymentReminder: React.FC = () => {
         ? 'border-gray-600 opacity-50 cursor-not-allowed'
         : 'border-gray-600 hover:border-[#ff6b00] transition-colors'
     }`;
+  };
+
+  const checkCustomerCommunication = (customer: CustomerData) => {
+    // Format cell number to ensure it has country code
+    const formatCellNumber = (number: string | number | undefined | null) => {
+      if (!number) return null;
+      // Convert to string if it's a number
+      const numberStr = number.toString();
+      const cleaned = numberStr.replace(/\D/g, ''); // Remove non-digits
+      if (cleaned.length === 9) {
+        return `+27${cleaned}`; // Add country code if it's missing
+      } else if (cleaned.length === 11 && cleaned.startsWith('27')) {
+        return `+${cleaned}`; // Add + if it's missing
+      }
+      return numberStr; // Return original if format is unknown
+    };
+
+    const formattedCellNumber = formatCellNumber(customer.cellNumber);
+    
+    console.log('Checking communication for customer:', customer.accountHolderName);
+    console.log('Original cell number:', customer.cellNumber);
+    console.log('Original cell number type:', typeof customer.cellNumber);
+    console.log('Formatted cell number:', formattedCellNumber);
+    console.log('Email:', customer.emailAddress);
+    
+    return {
+      sms: Boolean(formattedCellNumber) && 
+           formattedCellNumber.length >= 10,
+      email: Boolean(customer.emailAddress) && 
+             typeof customer.emailAddress === 'string' && 
+             customer.emailAddress.includes('@') && 
+             customer.emailAddress !== 'N/A',
+      whatsapp: Boolean(formattedCellNumber) && 
+                formattedCellNumber.length >= 10
+    };
   };
 
   const filteredReminders = reminders.filter(reminder => {
@@ -724,7 +758,7 @@ const SuperPaymentReminder: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-[#ff6b00] font-medium">R {formatCurrency(customer.outstandingTotalBalance)}</div>
-                        <div className="text-xs text-gray-400">{customer.accountStatus}</div>
+                        <div className="text-xs text-gray-400 mt-1">{customer.accountStatus}</div>
                       </div>
                     </button>
                   ))}
@@ -785,58 +819,73 @@ const SuperPaymentReminder: React.FC = () => {
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
               onClick={() => {
-                if (selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled)) {
+                const availableCustomers = selectedAccounts.filter(customer => 
+                  checkCustomerCommunication(customer).sms
+                );
+                if (availableCustomers.length > 0) {
                   setSelectedChannel('sms');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('SMS communication is not enabled for all selected customers');
+                  toast.error('No selected customers have valid phone numbers for SMS');
                 }
               }}
-              disabled={!selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled)}
+              disabled={!selectedAccounts.some(customer => checkCustomerCommunication(customer).sms)}
               className={getChannelButtonClass('sms')}
             >
               <Phone className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">SMS</span>
-              {!selectedAccounts.every(customer => customer.communicationPreferences?.sms?.enabled) && (
-                <span className="text-xs text-gray-400 mt-1">Not available</span>
+              {selectedAccounts.length > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {selectedAccounts.filter(customer => checkCustomerCommunication(customer).sms).length} of {selectedAccounts.length} available
+                </div>
               )}
             </button>
 
             <button
               onClick={() => {
-                if (selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')) {
+                const availableCustomers = selectedAccounts.filter(customer => 
+                  checkCustomerCommunication(customer).email
+                );
+                if (availableCustomers.length > 0) {
                   setSelectedChannel('email');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('Email communication is not available for all selected customers');
+                  toast.error('No selected customers have valid email addresses');
                 }
               }}
-              disabled={!selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')}
+              disabled={!selectedAccounts.some(customer => checkCustomerCommunication(customer).email)}
               className={getChannelButtonClass('email')}
             >
               <Mail className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">Email</span>
-              {!selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A') && (
-                <span className="text-xs text-gray-400 mt-1">Not available</span>
+              {selectedAccounts.length > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {selectedAccounts.filter(customer => checkCustomerCommunication(customer).email).length} of {selectedAccounts.length} available
+                </div>
               )}
             </button>
 
             <button
               onClick={() => {
-                if (selectedAccounts.every(customer => customer.cellNumber)) {
+                const availableCustomers = selectedAccounts.filter(customer => 
+                  checkCustomerCommunication(customer).whatsapp
+                );
+                if (availableCustomers.length > 0) {
                   setSelectedChannel('whatsapp');
                   setShowTemplateModal(true);
                 } else {
-                  toast.error('WhatsApp communication requires a valid phone number for all selected customers');
+                  toast.error('No selected customers have valid phone numbers for WhatsApp');
                 }
               }}
-              disabled={!selectedAccounts.every(customer => customer.cellNumber)}
+              disabled={!selectedAccounts.some(customer => checkCustomerCommunication(customer).whatsapp)}
               className={getChannelButtonClass('whatsapp')}
             >
               <MessageSquare className="text-[#ff6b00] mb-2" size={24} />
               <span className="text-white text-sm">WhatsApp</span>
-              {!selectedAccounts.every(customer => customer.cellNumber) && (
-                <span className="text-xs text-gray-400 mt-1">Not available</span>
+              {selectedAccounts.length > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {selectedAccounts.filter(customer => checkCustomerCommunication(customer).whatsapp).length} of {selectedAccounts.length} available
+                </div>
               )}
             </button>
           </div>
