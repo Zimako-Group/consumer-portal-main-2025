@@ -178,6 +178,7 @@ const SuperPaymentReminder: React.FC = () => {
       return [...prev, customer];
     });
     setSearchResults([]);
+    setSearchTerm(''); // Clear the search term
   };
 
   const clearSelectedCustomers = () => {
@@ -730,7 +731,8 @@ const SuperPaymentReminder: React.FC = () => {
                 </div>
               )}
               
-              {searchTerm && !isSearching && searchResults.length === 0 && (
+              {/* Only show "No customers found" when there's a search term, not searching, and no results */}
+              {searchTerm && !isSearching && searchResults.length === 0 && !selectedAccounts.find(acc => acc.accountNumber === searchTerm) && (
                 <div className="absolute z-50 w-full mt-1 bg-[#2a334d] rounded-lg border border-gray-600 shadow-lg p-4 text-center text-gray-400">
                   No customers found
                 </div>
@@ -1192,9 +1194,7 @@ const SuperPaymentReminder: React.FC = () => {
                 >
                   {/* Customer Details */}
                   <div className="col-span-3">
-                    <p className="text-white font-medium truncate">
-                      {customer.accountHolderName}
-                    </p>
+                    <p className="text-white font-medium">{customer.accountHolderName}</p>
                     <p className="text-sm text-gray-400 mt-1">
                       {customer.accountNumber}
                     </p>
