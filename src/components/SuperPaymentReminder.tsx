@@ -4,10 +4,11 @@ import { db } from '../firebaseConfig';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Search, Mail, MessageSquare, Phone, Bell, Calendar, Clock, X, Plus, Edit, Trash, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Mail, MessageSquare, Phone, Bell, Calendar, Clock, X, Plus, Edit, Trash, CheckCircle, XCircle, ChevronFirst, ChevronLeft, ChevronRight, ChevronLast, Users, FileSpreadsheet } from 'lucide-react';
 import { sendSMSAndRecord, sendEmailAndRecord } from '../services/communicationService';
 import { useAuth } from '../contexts/AuthContext';
 import { updateCommunicationStats } from '../services/communicationService';
+import * as XLSX from 'xlsx';
 
 interface CustomerData {
   accountHolderName: string;
@@ -102,6 +103,14 @@ const SuperPaymentReminder: React.FC = () => {
     accountType: '',
     balanceAbove: 0,
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [sortedCustomers, setSortedCustomers] = useState<CustomerData[]>([]);
+
+  const formatCurrency = (amount: any): string => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount || 0);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
 
   useEffect(() => {
     fetchReminders();
@@ -302,6 +311,48 @@ const SuperPaymentReminder: React.FC = () => {
     }
   };
 
+  const handleExportToExcel = () => {
+    try {
+      // Prepare the data for export
+      const exportData = sortedCustomers.map(customer => ({
+        'Account Holder': customer.accountHolderName || 'N/A',
+        'Account Number': customer.accountNumber || 'N/A',
+        'Account Status': customer.accountStatus || 'N/A',
+        'Account Type': customer.accountType || 'N/A',
+        'Cell Number': customer.cellNumber || 'N/A',
+        'Email Address': customer.emailAddress || 'N/A',
+        'Outstanding Balance': typeof customer.outstandingTotalBalance === 'number' 
+          ? customer.outstandingTotalBalance.toFixed(2) 
+          : '0.00',
+        'Last Payment Amount': typeof customer.lastPaymentAmount === 'number' 
+          ? customer.lastPaymentAmount.toFixed(2) 
+          : '0.00',
+        'Last Payment Date': customer.lastPaymentDate 
+          ? formatDateWithSlashes(customer.lastPaymentDate) 
+          : 'N/A',
+        'SMS Enabled': customer.communicationPreferences?.sms?.enabled ? 'Yes' : 'No',
+        'Email Enabled': customer.communicationPreferences?.email?.enabled ? 'Yes' : 'No'
+      }));
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Generate file name with current date
+      const date = new Date().toISOString().split('T')[0];
+      const fileName = `top_owing_customers_${date}.xlsx`;
+
+      // Create workbook and save
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Top Owing Customers');
+      XLSX.writeFile(wb, fileName);
+
+      toast.success('Successfully exported customer data to Excel');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast.error('Failed to export data to Excel');
+    }
+  };
+
   const getChannelButtonClass = (channel: 'sms' | 'email' | 'whatsapp') => {
     const isDisabled = channel === 'email' 
       ? !selectedAccounts.every(customer => customer.emailAddress && customer.emailAddress !== 'N/A')
@@ -445,7 +496,14 @@ const SuperPaymentReminder: React.FC = () => {
       const customersRef = collection(db, 'customers');
       const snapshot = await getDocs(customersRef);
       const customers = snapshot.docs.map(doc => doc.data() as CustomerData);
-      setAllCustomers(customers);
+      
+      // Sort customers by outstanding balance (highest to lowest)
+      const sorted = customers
+        .sort((a, b) => b.outstandingTotalBalance - a.outstandingTotalBalance)
+        .slice(0, 100); // Get top 100 owing customers
+      
+      setAllCustomers(sorted);
+      setSortedCustomers(sorted);
     } catch (error) {
       console.error('Error fetching customers:', error);
       toast.error('Failed to fetch customers');
@@ -455,7 +513,7 @@ const SuperPaymentReminder: React.FC = () => {
   };
 
   const handleBulkSelection = () => {
-    let filteredCustomers = [...allCustomers];
+    let filteredCustomers = [...currentCustomers];
     
     // Apply filters
     if (selectedFilters.accountStatus) {
@@ -488,74 +546,35 @@ const SuperPaymentReminder: React.FC = () => {
     toast.success(`Selected ${validCustomers.length} customers for bulk SMS`);
   };
 
-  const BulkSelectionHeader: React.FC<{
-    selectedCount: number;
-    onClear: () => void;
-  }> = ({ selectedCount, onClear }) => (
-    <div className="flex justify-between items-center mb-4 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
-      <div className="flex items-center gap-2">
-        <CheckCircle className="text-[#ff6b00]" size={20} />
-        <span className="text-white font-medium">
-          {selectedCount} Customer{selectedCount !== 1 ? 's' : ''} Selected
-        </span>
-      </div>
-      <button
-        onClick={onClear}
-        className="px-3 py-1 text-sm bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-      >
-        Clear Selection
-      </button>
-    </div>
-  );
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentCustomers = sortedCustomers.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(sortedCustomers.length / itemsPerPage);
 
-  const ProgressTracker: React.FC<{
-    progress: BatchProgress;
-  }> = ({ progress }) => (
-    <div className="mb-6 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-white font-medium">Processing Batch</span>
-        <span className="text-gray-400">
-          {progress.sent + progress.failed} / {progress.total}
+  const PaginationControls = () => (
+    <div className="flex items-center justify-between mt-4 bg-[#2a334d] p-3 rounded-lg">
+      <span className="text-sm text-gray-400">
+        Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, sortedCustomers.length)} of {sortedCustomers.length} customers
+      </span>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className="px-3 py-1 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234]"
+        >
+          Previous
+        </button>
+        <span className="px-4 py-1 bg-[#1a2234] text-white rounded">
+          {currentPage} of {totalPages}
         </span>
+        <button
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234]"
+        >
+          Next
+        </button>
       </div>
-      
-      {/* Progress Bar */}
-      <div className="w-full h-2 bg-gray-700 rounded-full mb-3">
-        <div
-          className="h-full bg-[#ff6b00] rounded-full transition-all duration-300"
-          style={{
-            width: `${((progress.sent + progress.failed) / progress.total) * 100}%`
-          }}
-        />
-      </div>
-      
-      {/* Stats */}
-      <div className="flex justify-between text-sm">
-        <div className="flex items-center gap-1">
-          <CheckCircle className="text-green-500" size={16} />
-          <span className="text-green-400">{progress.sent} Sent</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <XCircle className="text-red-500" size={16} />
-          <span className="text-red-400">{progress.failed} Failed</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  const CustomerChip: React.FC<{
-    customer: CustomerData;
-    onRemove: (customer: CustomerData) => void;
-  }> = ({ customer, onRemove }) => (
-    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#2a334d] rounded-lg border border-gray-600 m-1">
-      <span className="text-sm text-white">{customer.accountHolderName}</span>
-      <span className="text-xs text-gray-400">{customer.accountNumber}</span>
-      <button
-        onClick={() => onRemove(customer)}
-        className="ml-1 text-gray-400 hover:text-white transition-colors"
-      >
-        ×
-      </button>
     </div>
   );
 
@@ -649,15 +668,25 @@ const SuperPaymentReminder: React.FC = () => {
 
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-400">
-                  {isLoadingCustomers ? 'Loading customers...' : `${allCustomers.length} customers available`}
+                  {isLoadingCustomers ? 'Loading customers...' : `Top ${sortedCustomers.length} highest owing customers`}
                 </span>
-                <button
-                  onClick={handleBulkSelection}
-                  disabled={isLoadingCustomers || allCustomers.length === 0}
-                  className="px-4 py-2 bg-[#ff6b00] text-white rounded-lg hover:bg-[#ff6b00]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Select Matching Customers
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportToExcel}
+                    disabled={isLoadingCustomers || sortedCustomers.length === 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <FileSpreadsheet size={16} />
+                    Export to Excel
+                  </button>
+                  <button
+                    onClick={handleBulkSelection}
+                    disabled={isLoadingCustomers || currentCustomers.length === 0}
+                    className="px-4 py-2 bg-[#ff6b00] text-white rounded-lg hover:bg-[#ff6b00]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Select Matching Customers
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -673,23 +702,58 @@ const SuperPaymentReminder: React.FC = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
-              {selectedAccounts.length > 0 && (
-                <button
-                  onClick={clearSelectedCustomers}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-                >
-                  <X size={16} />
-                </button>
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin text-gray-400">⌛</div>
+                </div>
+              )}
+              
+              {/* Search Results Dropdown */}
+              {searchResults.length > 0 && searchTerm && (
+                <div className="absolute z-50 w-full mt-1 bg-[#2a334d] rounded-lg border border-gray-600 shadow-lg max-h-60 overflow-y-auto">
+                  {searchResults.map((customer) => (
+                    <button
+                      key={customer.accountNumber}
+                      onClick={() => handleCustomerSelect(customer)}
+                      className="w-full px-4 py-2 text-left hover:bg-[#1a2234] transition-colors flex justify-between items-center group"
+                    >
+                      <div>
+                        <div className="text-white font-medium">{customer.accountHolderName}</div>
+                        <div className="text-sm text-gray-400">{customer.accountNumber}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[#ff6b00] font-medium">R {formatCurrency(customer.outstandingTotalBalance)}</div>
+                        <div className="text-xs text-gray-400">{customer.accountStatus}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {searchTerm && !isSearching && searchResults.length === 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-[#2a334d] rounded-lg border border-gray-600 shadow-lg p-4 text-center text-gray-400">
+                  No customers found
+                </div>
               )}
             </div>
           )}
           
           {/* Selected Customers Info */}
           {selectedAccounts.length > 0 && (
-            <BulkSelectionHeader
-              selectedCount={selectedAccounts.length}
-              onClear={clearSelectedCustomers}
-            />
+            <div className="flex justify-between items-center mb-4 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="text-[#ff6b00]" size={20} />
+                <span className="text-white font-medium">
+                  {selectedAccounts.length} Customer{selectedAccounts.length !== 1 ? 's' : ''} Selected
+                </span>
+              </div>
+              <button
+                onClick={clearSelectedCustomers}
+                className="px-3 py-1 text-sm bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+              >
+                Clear Selection
+              </button>
+            </div>
           )}
           
           {/* Selected Customers */}
@@ -697,11 +761,19 @@ const SuperPaymentReminder: React.FC = () => {
             <div className="mt-4">
               <div className="flex flex-wrap gap-2">
                 {selectedAccounts.map(customer => (
-                  <CustomerChip
+                  <div
                     key={customer.accountNumber}
-                    customer={customer}
-                    onRemove={handleCustomerSelect}
-                  />
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#2a334d] rounded-lg border border-gray-600 m-1"
+                  >
+                    <span className="text-sm text-white">{customer.accountHolderName}</span>
+                    <span className="text-xs text-gray-400">{customer.accountNumber}</span>
+                    <button
+                      onClick={() => handleCustomerSelect(customer)}
+                      className="ml-1 text-gray-400 hover:text-white transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -892,7 +964,36 @@ const SuperPaymentReminder: React.FC = () => {
 
       {/* Progress Tracker */}
       {batchProgress.inProgress && (
-        <ProgressTracker progress={batchProgress} />
+        <div className="mb-6 p-4 bg-[#2a334d] rounded-lg border border-gray-600">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-white font-medium">Processing Batch</span>
+            <span className="text-gray-400">
+              {batchProgress.sent + batchProgress.failed} / {batchProgress.total}
+            </span>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="w-full h-2 bg-gray-700 rounded-full mb-3">
+            <div
+              className="h-full bg-[#ff6b00] rounded-full transition-all duration-300"
+              style={{
+                width: `${((batchProgress.sent + batchProgress.failed) / batchProgress.total) * 100}%`
+              }}
+            />
+          </div>
+          
+          {/* Stats */}
+          <div className="flex justify-between text-sm">
+            <div className="flex items-center gap-1">
+              <CheckCircle className="text-green-500" size={16} />
+              <span className="text-green-400">{batchProgress.sent} Sent</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <XCircle className="text-red-500" size={16} />
+              <span className="text-red-400">{batchProgress.failed} Failed</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Template Selection Modal */}
@@ -1065,6 +1166,182 @@ const SuperPaymentReminder: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Bulk Mode Customer List */}
+      {isBulkMode && (
+        <div className="mb-6 space-y-4">
+          {/* Table Header */}
+          <div className="bg-[#2a334d] rounded-lg border border-gray-600 overflow-hidden">
+            <div className="grid grid-cols-12 gap-4 p-4 border-b border-gray-600 text-sm font-medium text-gray-400">
+              <div className="col-span-3">Customer Details</div>
+              <div className="col-span-2">Account Type</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-3">Contact Info</div>
+              <div className="col-span-2 text-right">Outstanding Balance</div>
+            </div>
+            
+            {/* Customer List */}
+            <div className="divide-y divide-gray-600">
+              {currentCustomers.map((customer) => (
+                <div
+                  key={customer.accountNumber}
+                  className="grid grid-cols-12 gap-4 p-4 hover:bg-[#1a2234] transition-colors items-center"
+                >
+                  {/* Customer Details */}
+                  <div className="col-span-3">
+                    <p className="text-white font-medium truncate">
+                      {customer.accountHolderName}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {customer.accountNumber}
+                    </p>
+                  </div>
+                  
+                  {/* Account Type */}
+                  <div className="col-span-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
+                      ${customer.accountType === 'business' 
+                        ? 'bg-purple-900/30 text-purple-400'
+                        : 'bg-blue-900/30 text-blue-400'}`}
+                    >
+                      {customer.accountType === 'business' ? 'Business' : 'Personal'}
+                    </span>
+                  </div>
+                  
+                  {/* Account Status */}
+                  <div className="col-span-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
+                      ${customer.accountStatus === 'active'
+                        ? 'bg-green-900/30 text-green-400'
+                        : customer.accountStatus === 'inactive'
+                        ? 'bg-red-900/30 text-red-400'
+                        : 'bg-yellow-900/30 text-yellow-400'}`}
+                    >
+                      {customer.accountStatus.charAt(0).toUpperCase() + customer.accountStatus.slice(1)}
+                    </span>
+                  </div>
+                  
+                  {/* Contact Info */}
+                  <div className="col-span-3">
+                    <div className="flex flex-col gap-1">
+                      {customer.cellNumber && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone size={14} className="text-gray-400" />
+                          <span className="text-gray-300">{customer.cellNumber}</span>
+                        </div>
+                      )}
+                      {customer.emailAddress && customer.emailAddress !== 'N/A' && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail size={14} className="text-gray-400" />
+                          <span className="text-gray-300 truncate">{customer.emailAddress}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Outstanding Balance */}
+                  <div className="col-span-2 text-right">
+                    <p className="text-[#ff6b00] font-medium">
+                      R {typeof customer.outstandingTotalBalance === 'number' 
+                          ? customer.outstandingTotalBalance.toFixed(2) 
+                          : '0.00'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Last Payment: R {typeof customer.lastPaymentAmount === 'number' 
+                          ? customer.lastPaymentAmount.toFixed(2) 
+                          : '0.00'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Enhanced Pagination Controls */}
+          <div className="bg-[#2a334d] rounded-lg border border-gray-600 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-400">
+                  Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, sortedCustomers.length)} of {sortedCustomers.length} customers
+                </span>
+                <span className="text-sm text-[#ff6b00]">
+                  Total Outstanding: R {sortedCustomers.reduce((sum, customer) => {
+                    const amount = typeof customer.outstandingTotalBalance === 'number' 
+                      ? customer.outstandingTotalBalance 
+                      : 0;
+                    return sum + amount;
+                  }, 0).toFixed(2)}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-2 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234] transition-colors"
+                >
+                  <ChevronFirst size={16} />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234] transition-colors"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                
+                <div className="flex items-center gap-1 px-4">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const pageNum = currentPage - 2 + i;
+                    if (pageNum > 0 && pageNum <= totalPages) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 rounded ${
+                            currentPage === pageNum
+                              ? 'bg-[#ff6b00] text-white'
+                              : 'bg-[#1a2234] text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234] transition-colors"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 bg-[#1a2234] text-white rounded hover:bg-[#ff6b00] disabled:opacity-50 disabled:hover:bg-[#1a2234] transition-colors"
+                >
+                  <ChevronLast size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={handleBulkSelection}
+              disabled={isLoadingCustomers || currentCustomers.length === 0}
+              className="px-6 py-3 bg-[#ff6b00] text-white rounded-lg hover:bg-[#ff6b00]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Users size={20} />
+              Select {currentCustomers.length} Customers
+            </button>
           </div>
         </div>
       )}
