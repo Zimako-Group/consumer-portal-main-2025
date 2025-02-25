@@ -199,31 +199,31 @@ export default function Statement() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="bg-white dark:bg-dark-card rounded-2xl shadow-lg p-8 border border-gray-100 dark:border-gray-800">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
               Financial Statement
             </h2>
-            <p className="text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Account: {customerData?.accountNumber}
             </p>
           </div>
           <button
             onClick={handleDownloadPDF}
             disabled={isDownloading}
-            className={`flex items-center px-6 py-3 bg-theme text-white rounded-xl transition-all transform shadow-md ${
-              isDownloading ? 'opacity-75 cursor-not-allowed' : 'hover:bg-theme/90 hover:scale-105'
+            className={`flex items-center px-4 py-2 bg-theme text-white text-sm rounded-md transition-all transform shadow-sm ${
+              isDownloading ? 'opacity-75 cursor-not-allowed' : 'hover:bg-theme/90 hover:scale-102'
             }`}
           >
             {isDownloading ? (
               <>
-                <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Downloading...
+                <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm">Downloading...</span>
               </>
             ) : (
               <>
-                <Download className="w-5 h-5 mr-2" />
-                Download Statement
+                <Download className="w-4 h-4 mr-1.5" />
+                <span className="text-sm">Download Statement</span>
               </>
             )}
           </button>
@@ -293,10 +293,10 @@ export default function Statement() {
         </div>
 
         {/* Filters Section */}
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date Range
               </label>
               <DatePicker
@@ -304,18 +304,18 @@ export default function Statement() {
                 startDate={selectedDateRange[0]}
                 endDate={selectedDateRange[1]}
                 onChange={(dates) => setSelectedDateRange(dates)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover dark:text-white"
+                className="w-full px-2.5 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-theme focus:border-transparent dark:bg-dark-hover dark:text-white"
                 placeholderText="Select date range"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Transaction Type
               </label>
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as 'all' | 'debit' | 'credit')}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-theme focus:border-transparent dark:bg-dark-hover dark:text-white"
+                className="w-full px-2.5 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-theme focus:border-transparent dark:bg-dark-hover dark:text-white"
               >
                 <option value="all">All Transactions</option>
                 <option value="debit">Debits Only</option>
@@ -326,61 +326,50 @@ export default function Statement() {
         </div>
 
         {/* Transactions Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-700">
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">
-                    Date
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">
-                    Description
-                  </th>
-                  <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600 dark:text-gray-300">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.map((transaction) => (
-                  <tr
-                    key={transaction.id}
-                    className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                      {format(transaction.date, 'dd MMM yyyy')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                      {transaction.description}
-                    </td>
-                    <td className={`px-6 py-4 text-sm text-right font-medium ${
-                      transaction.type === 'credit'
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      R {transaction.amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="bg-gray-700/40 dark:bg-gray-800 rounded-md overflow-hidden">
+          <div className="grid grid-cols-[1fr_2fr_1fr] text-[11px] font-medium text-white p-1.5">
+            <div>Date</div>
+            <div>Description</div>
+            <div className="text-right">Amount</div>
+          </div>
+          <div className="divide-y divide-gray-700/30">
+            {filteredTransactions?.map((transaction, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-[1fr_2fr_1fr] text-xs p-1.5 hover:bg-gray-700/20"
+              >
+                <div className="text-gray-300">{format(transaction.date, 'dd MMM yyyy')}</div>
+                <div className="text-gray-300">{transaction.description}</div>
+                <div className={`text-right ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                  R {Math.abs(transaction.amount).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            ))}
+            {(!filteredTransactions || filteredTransactions.length === 0) && (
+              <div className="text-center text-xs text-gray-400 py-2">
+                No transactions found
+              </div>
+            )}
           </div>
         </div>
 
         {/* Balance Summary */}
-        <div className="mt-8 flex flex-col md:flex-row justify-between items-center bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
-          <div className="mb-4 md:mb-0">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Opening Balance</p>
-            <p className="text-xl font-semibold text-gray-900 dark:text-white">
-              R {currentStatement?.openingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-            </p>
+        <div className="mt-3 flex flex-col md:flex-row justify-between items-center bg-gray-50 dark:bg-gray-800 rounded-md p-2">
+          <div className="mb-1.5 md:mb-0 flex items-center gap-3">
+            <div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400">Opening Balance</p>
+              <p className="text-xs font-medium text-gray-900 dark:text-white">
+                R {currentStatement?.openingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Closing Balance</p>
-            <p className="text-xl font-semibold text-gray-900 dark:text-white">
-              R {currentStatement?.closingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
-            </p>
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400">Closing Balance</p>
+              <p className="text-xs font-medium text-red-500 dark:text-red-400">
+                R {customerData?.outstandingBalance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
           </div>
         </div>
       </div>
