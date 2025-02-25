@@ -107,13 +107,131 @@ const SuperPaymentReminder: React.FC = () => {
   const [itemsPerPage] = useState(10);
   const [sortedCustomers, setSortedCustomers] = useState<CustomerData[]>([]);
 
+  // Add this function near the top of the component, after the interfaces
+  const formatCellNumber = (number: string | undefined | null): string => {
+    if (!number) return '';
+    
+    // Remove all non-digit characters
+    const cleaned = number.toString().replace(/\D/g, '');
+    
+    // Check if it already has country code
+    if (cleaned.startsWith('27') && cleaned.length === 11) {
+      return '+' + cleaned;
+    }
+    
+    // Add country code if it's a 9-digit number
+    if (cleaned.length === 9) {
+      return '+27' + cleaned;
+    }
+    
+    // If it's already in the correct format, return as is
+    if (cleaned.length === 11 && cleaned.startsWith('27')) {
+      return '+' + cleaned;
+    }
+    
+    // Return original if format is unknown
+    return number.toString();
+  };
+
   const formatCurrency = (amount: any): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount || 0);
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  const processPendingReminders = async () => {
+    try {
+      console.log('Checking for pending reminders...');
+      const now = new Date();
+      
+      // Query for pending reminders that are due
+      const remindersQuery = query(
+        collection(db, 'paymentReminders'),
+        where('status', '==', 'pending'),
+        where('scheduledDate', '<=', Timestamp.fromDate(now))
+      );
+
+      const snapshot = await getDocs(remindersQuery);
+      console.log(`Found ${snapshot.size} reminders to process`);
+
+      for (const doc of snapshot.docs) {
+        const reminder = { id: doc.id, ...doc.data() } as ReminderData;
+        console.log('Processing reminder:', reminder);
+
+        try {
+          if (reminder.channel === 'sms') {
+            console.log('Attempting to send SMS to:', reminder.contactInfo);
+            console.log('Message content:', reminder.message);
+            
+            if (!reminder.contactInfo) {
+              throw new Error('No contact information provided for SMS');
+            }
+
+            // Send SMS using the communicationService with the correct parameters
+            const result = await sendSMSAndRecord(
+              reminder.contactInfo,
+              reminder.message,
+              reminder.accountNumber || '',
+              'system' // sender
+            );
+
+            console.log('SMS send result:', result);
+
+            // Update reminder status to sent
+            await updateDoc(doc.ref, {
+              status: 'sent',
+              sentDate: Timestamp.now(),
+              success: true
+            });
+
+            console.log('SMS sent successfully for reminder:', reminder.id);
+            
+            // Update communication stats
+            await updateCommunicationStats('sms');
+          }
+        } catch (error) {
+          console.error('Failed to send reminder:', error);
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            reminder: reminder
+          });
+          
+          await updateDoc(doc.ref, {
+            status: 'failed',
+            errorMessage: error.message,
+            success: false,
+            lastAttempt: Timestamp.now()
+          });
+
+          // Update communication stats for failed attempt
+          await updateCommunicationStats('sms');
+        }
+      }
+
+      // Refresh the reminders list if any were processed
+      if (snapshot.size > 0) {
+        await fetchReminders();
+      }
+    } catch (error) {
+      console.error('Error processing reminders:', error);
+      toast.error('Error processing reminders: ' + error.message);
+    }
+  };
+
   useEffect(() => {
+    console.log('Fetching reminders...');
     fetchReminders();
+  }, []);
+
+  useEffect(() => {
+    // Check for pending reminders every minute
+    const intervalId = setInterval(processPendingReminders, 60000);
+    
+    // Run once when component mounts
+    processPendingReminders();
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -188,16 +306,20 @@ const SuperPaymentReminder: React.FC = () => {
 
   const fetchReminders = async () => {
     try {
+      console.log('Fetching reminders...');
       setLoading(true);
       const remindersQuery = query(
         collection(db, 'paymentReminders'),
         orderBy('scheduledDate', 'desc')
       );
+      console.log('Executing reminders query...');
       const snapshot = await getDocs(remindersQuery);
+      console.log('Got reminders snapshot:', snapshot.size, 'documents');
       const remindersList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as ReminderData[];
+      console.log('Processed reminders:', remindersList);
       setReminders(remindersList);
     } catch (error) {
       console.error('Error fetching reminders:', error);
@@ -209,6 +331,7 @@ const SuperPaymentReminder: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted');
 
     if (selectedAccounts.length === 0) {
       toast.error('Please select at least one customer');
@@ -231,10 +354,12 @@ const SuperPaymentReminder: React.FC = () => {
     }
 
     try {
+      console.log('Starting to schedule reminder...');
       setLoading(true);
       setBatchProgress({ total: selectedAccounts.length, sent: 0, failed: 0, inProgress: true });
       
       const scheduledDateTime = new Date(scheduledDate + 'T' + scheduledTime);
+      console.log('Scheduled date time:', scheduledDateTime);
       
       if (scheduledDateTime < new Date()) {
         toast.error('Please select a future date and time');
@@ -247,15 +372,13 @@ const SuperPaymentReminder: React.FC = () => {
 
       // Process each customer in the batch
       for (const customer of selectedAccounts) {
-        // Validate contact info
-        if (selectedChannel === 'email' && (!customer.emailAddress || customer.emailAddress === 'N/A')) {
-          failedCount++;
-          continue;
-        }
-
-        if (selectedChannel === 'sms' && 
-            (!customer.communicationPreferences?.sms?.enabled || 
-             !customer.cellNumber)) {
+        const availability = checkCustomerCommunication(customer);
+        console.log('Processing customer:', customer.accountHolderName);
+        console.log('Channel availability:', availability);
+        
+        // Skip if the selected channel is not available for this customer
+        if (!availability[selectedChannel]) {
+          console.log(`${selectedChannel} not available for customer:`, customer.accountHolderName);
           failedCount++;
           continue;
         }
@@ -273,7 +396,7 @@ const SuperPaymentReminder: React.FC = () => {
           customerName: customer.accountHolderName,
           contactInfo: selectedChannel === 'email' 
             ? customer.emailAddress 
-            : customer.cellNumber,
+            : formatCellNumber(customer.cellNumber),
           department: 'billing',
           purpose: 'payment_reminder',
           amount: customer.outstandingTotalBalance,
@@ -282,30 +405,33 @@ const SuperPaymentReminder: React.FC = () => {
           batchId
         };
 
+        console.log('Saving reminder data:', reminderData);
+
         try {
-          await addDoc(collection(db, 'paymentReminders'), reminderData);
+          const docRef = await addDoc(collection(db, 'paymentReminders'), reminderData);
+          console.log('Reminder saved successfully with ID:', docRef.id);
           successCount++;
           setBatchProgress(prev => ({ ...prev, sent: prev.sent + 1 }));
         } catch (error) {
+          console.error(`Failed to schedule reminder for ${customer.accountNumber}:`, error);
           failedCount++;
           setBatchProgress(prev => ({ ...prev, failed: prev.failed + 1 }));
-          console.error(`Failed to schedule reminder for ${customer.accountNumber}:`, error);
         }
       }
 
-      toast.success(`Batch scheduled: ${successCount} successful, ${failedCount} failed`);
+      console.log(`Scheduling complete. Success: ${successCount}, Failed: ${failedCount}`);
+      toast.success(`Reminder${successCount > 1 ? 's' : ''} scheduled successfully!`);
       
-      // Reset form
+      // Reset form and fetch updated reminders
       setMessage('');
       setScheduledDate('');
       setScheduledTime('');
       setSelectedChannel(null);
-      clearSelectedCustomers();
-      
-      fetchReminders();
+      setSelectedAccounts([]);
+      await fetchReminders();
     } catch (error) {
-      console.error('Error scheduling batch reminders:', error);
-      toast.error(`Failed to schedule batch reminders: ${error.message}`);
+      console.error('Error scheduling reminders:', error);
+      toast.error('Failed to schedule reminders');
     } finally {
       setLoading(false);
       setBatchProgress(prev => ({ ...prev, inProgress: false }));
@@ -371,19 +497,6 @@ const SuperPaymentReminder: React.FC = () => {
 
   const checkCustomerCommunication = (customer: CustomerData) => {
     // Format cell number to ensure it has country code
-    const formatCellNumber = (number: string | number | undefined | null) => {
-      if (!number) return null;
-      // Convert to string if it's a number
-      const numberStr = number.toString();
-      const cleaned = numberStr.replace(/\D/g, ''); // Remove non-digits
-      if (cleaned.length === 9) {
-        return `+27${cleaned}`; // Add country code if it's missing
-      } else if (cleaned.length === 11 && cleaned.startsWith('27')) {
-        return `+${cleaned}`; // Add + if it's missing
-      }
-      return numberStr; // Return original if format is unknown
-    };
-
     const formattedCellNumber = formatCellNumber(customer.cellNumber);
     
     console.log('Checking communication for customer:', customer.accountHolderName);
@@ -971,6 +1084,12 @@ const SuperPaymentReminder: React.FC = () => {
         <div className="bg-[#1a2234] rounded-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-white text-xl font-semibold">Scheduled Reminders</h2>
+            <button
+              onClick={processPendingReminders}
+              className="px-4 py-2 bg-[#2a334d] text-white rounded-lg hover:bg-[#3a435d] transition-colors"
+            >
+              Check Pending Reminders
+            </button>
           </div>
 
           {/* Search Reminders */}
@@ -987,28 +1106,54 @@ const SuperPaymentReminder: React.FC = () => {
 
           {/* Reminders List */}
           <div className="space-y-4">
-            {filteredReminders.map((reminder) => (
-              <div
-                key={reminder.id}
-                className="p-4 bg-[#2a334d] rounded-lg border border-gray-600"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-white font-medium">{reminder.message}</span>
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    reminder.status === 'sent'
-                      ? 'bg-green-900 text-green-100'
-                      : reminder.status === 'failed'
-                      ? 'bg-red-900 text-red-100'
-                      : 'bg-[#ff6b00] bg-opacity-20 text-[#ff6b00]'
-                  }`}>
-                    {reminder.status}
-                  </span>
-                </div>
-                <div className="text-gray-400 text-sm">
-                  Scheduled for: {reminder.scheduledDate.toDate().toLocaleString()}
-                </div>
-              </div>
-            ))}
+            {loading ? (
+              <div className="text-center text-gray-400">Loading reminders...</div>
+            ) : filteredReminders.length === 0 ? (
+              <div className="text-center text-gray-400">No reminders found</div>
+            ) : (
+              filteredReminders.map((reminder) => {
+                // Convert Firestore Timestamp to Date
+                const scheduledDate = reminder.scheduledDate instanceof Timestamp 
+                  ? reminder.scheduledDate.toDate() 
+                  : new Date(reminder.scheduledDate);
+
+                console.log('Rendering reminder:', {
+                  id: reminder.id,
+                  message: reminder.message,
+                  scheduledDate: scheduledDate,
+                  status: reminder.status
+                });
+
+                return (
+                  <div
+                    key={reminder.id}
+                    className="p-4 bg-[#2a334d] rounded-lg border border-gray-600"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-white font-medium">{reminder.message}</span>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        reminder.status === 'sent'
+                          ? 'bg-green-900 text-green-100'
+                          : reminder.status === 'failed'
+                          ? 'bg-red-900 text-red-100'
+                          : 'bg-[#ff6b00] bg-opacity-20 text-[#ff6b00]'
+                      }`}>
+                        {reminder.status}
+                      </span>
+                    </div>
+                    <div className="text-gray-400 text-sm">
+                      Scheduled for: {scheduledDate.toLocaleString()}
+                    </div>
+                    <div className="text-gray-400 text-sm mt-1">
+                      Customer: {reminder.customerName}
+                    </div>
+                    <div className="text-gray-400 text-sm">
+                      Contact: {reminder.contactInfo}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
