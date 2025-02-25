@@ -616,7 +616,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
             </a>
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Version 1.0.0-beta3
+            Version (2) 24 February 2024
           </div>
         </div>
       </footer>

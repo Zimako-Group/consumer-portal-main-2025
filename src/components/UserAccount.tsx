@@ -40,7 +40,7 @@ const InputField = memo(({
     value={value}
     onChange={onChange}
     placeholder={placeholder}
-    className="w-full px-3 py-2 bg-[#1E1E1E] border border-gray-700 text-white rounded-md focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+    className="w-full px-2 py-1.5 bg-[#1E1E1E] border border-gray-700 text-white rounded-md focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
   />
 ));
 
@@ -59,14 +59,14 @@ const TabButton = memo(({
 }) => (
   <button
     onClick={() => onClick(tab)}
-    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
       activeTab === tab
         ? 'bg-orange-500 text-white'
         : 'text-gray-400 hover:text-white hover:bg-[#2A2A2A]'
     }`}
   >
-    <Icon size={20} />
-    <span>{label}</span>
+    <Icon size={16} />
+    <span className="text-sm">{label}</span>
   </button>
 ));
 
@@ -79,14 +79,14 @@ const ProfileCard = memo(({
   label: string;
   value: string;
 }) => (
-  <div className="bg-[#1E1E1E] p-6 rounded-xl border border-gray-700">
-    <div className="flex items-center gap-3 mb-4">
-      <div className="bg-orange-500/10 p-2 rounded-lg">
-        <Icon className="text-orange-500" size={24} />
+  <div className="bg-[#1E1E1E] p-2.5 rounded-md border border-gray-700">
+    <div className="flex items-center gap-1.5 mb-1">
+      <div className="bg-orange-500/10 p-1 rounded-md">
+        <Icon className="text-orange-500" size={16} />
       </div>
-      <h3 className="text-gray-400">{label}</h3>
+      <h3 className="text-gray-400 text-xs">{label}</h3>
     </div>
-    <p className="text-xl text-white font-medium">{value}</p>
+    <p className="text-base text-white font-medium">{value}</p>
   </div>
 ));
 
@@ -120,22 +120,22 @@ const NotificationsSection = memo(({
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="space-y-6"
+    className="space-y-3"
   >
-    <div className="bg-[#1E1E1E] p-6 rounded-xl">
-      <h2 className="text-xl font-semibold text-white mb-4">Communication Preferences</h2>
-      <p className="text-gray-400 mb-6">Choose how you'd like to receive notifications about your account updates, payments, and important alerts.</p>
+    <div className="bg-[#1E1E1E] p-3 rounded-md">
+      <h2 className="text-base font-semibold text-white mb-1.5">Communication Preferences</h2>
+      <p className="text-gray-400 text-xs mb-3">Choose how you'd like to receive notifications about your account updates, payments, and important alerts.</p>
       
-      <div className="space-y-6">
-        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-orange-500/10 p-2 rounded-lg">
-                <Phone className="text-orange-500" size={24} />
+      <div className="space-y-2">
+        <div className="bg-[#2A2A2A] rounded-md p-2 border border-gray-700">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="bg-orange-500/10 p-1 rounded-md">
+                <Phone className="text-orange-500" size={16} />
               </div>
               <div>
-                <h3 className="text-white font-medium">SMS Notifications</h3>
-                <p className="text-sm text-gray-400">Receive updates via text message</p>
+                <h3 className="text-white font-medium text-xs">SMS Notifications</h3>
+                <p className="text-[10px] text-gray-400">Receive updates via text message</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -146,7 +146,7 @@ const NotificationsSection = memo(({
                 disabled={isSaving}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+              <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-md peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-md after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
             </label>
           </div>
           {localPreferences.sms.enabled && (
@@ -159,15 +159,15 @@ const NotificationsSection = memo(({
           )}
         </div>
 
-        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-green-500/10 p-2 rounded-lg">
-                <MessageCircle className="text-green-500" size={24} />
+        <div className="bg-[#2A2A2A] rounded-md p-2 border border-gray-700">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="bg-green-500/10 p-1 rounded-md">
+                <MessageCircle className="text-green-500" size={16} />
               </div>
               <div>
-                <h3 className="text-white font-medium">WhatsApp Notifications</h3>
-                <p className="text-sm text-gray-400">Get instant updates via WhatsApp</p>
+                <h3 className="text-white font-medium text-xs">WhatsApp Notifications</h3>
+                <p className="text-[10px] text-gray-400">Get instant updates via WhatsApp</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -178,7 +178,7 @@ const NotificationsSection = memo(({
                 disabled={isSaving}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+              <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-md peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-md after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
             </label>
           </div>
           {localPreferences.whatsapp.enabled && (
@@ -191,15 +191,15 @@ const NotificationsSection = memo(({
           )}
         </div>
 
-        <div className="bg-[#2A2A2A] rounded-xl p-5 border border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-500/10 p-2 rounded-lg">
-                <Mail className="text-blue-500" size={24} />
+        <div className="bg-[#2A2A2A] rounded-md p-2 border border-gray-700">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="bg-blue-500/10 p-1 rounded-md">
+                <Mail className="text-blue-500" size={16} />
               </div>
               <div>
-                <h3 className="text-white font-medium">Email Notifications</h3>
-                <p className="text-sm text-gray-400">Receive detailed updates via email</p>
+                <h3 className="text-white font-medium text-xs">Email Notifications</h3>
+                <p className="text-[10px] text-gray-400">Receive detailed updates via email</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -210,7 +210,7 @@ const NotificationsSection = memo(({
                 disabled={isSaving}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
+              <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-500/20 rounded-md peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-md after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500" />
             </label>
           </div>
           {localPreferences.email.enabled && (
@@ -225,20 +225,20 @@ const NotificationsSection = memo(({
       </div>
     </div>
 
-    <div className="flex justify-end mt-6">
+    <div className="flex justify-end mt-2">
       <button
         onClick={handleSavePreferences}
         disabled={isSaving}
-        className="flex items-center gap-2 px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 focus:ring-4 focus:ring-orange-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 focus:ring-4 focus:ring-orange-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isSaving ? (
           <>
-            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+            <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></span>
             <span>Saving...</span>
           </>
         ) : (
           <>
-            {showSuccessAnimation ? <CheckCircle2 size={20} /> : null}
+            {showSuccessAnimation ? <CheckCircle2 size={16} /> : null}
             <span>Save Preferences</span>
           </>
         )}
@@ -308,8 +308,8 @@ const UserAccount = memo(({
   }, [currentUser, isSaving, localPreferences, smsValue, whatsappValue, emailValue, onPreferencesSave]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex space-x-4 mb-8">
+    <div className="max-w-4xl mx-auto space-y-5">
+      <div className="flex space-x-3 mb-6">
         <TabButton 
           tab="profile" 
           icon={User} 
@@ -333,7 +333,7 @@ const UserAccount = memo(({
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            className="grid grid-cols-1 md:grid-cols-2 gap-3"
           >
             <ProfileCard icon={User} label="Name" value={userName} />
             <ProfileCard icon={CreditCard} label="Account Number" value={accountNumber} />
