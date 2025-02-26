@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { FileText, CreditCard, Activity, MessageSquare, Menu, HandshakeIcon, HelpCircle, UserPlus } from 'lucide-react';
 import { getGreeting, getSASTHour } from '../utils/timeUtils';
 import { db } from '../firebaseConfig';
@@ -17,6 +17,8 @@ import DashboardHelp from './DashboardHelp';
 import DashboardChangelog from './DashboardChangelog';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import SessionManager from '../utils/sessionManager';
+import { trackUserActivity } from '../utils/activityTracker';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -73,6 +75,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   const [showIndigentModal, setShowIndigentModal] = useState(false);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+  const sessionManagerRef = useRef<SessionManager | null>(null);
 
   useEffect(() => {
     console.log('Dashboard mounted with account number:', accountNumber);
@@ -97,10 +100,8 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
       setCurrentDueDate(formattedDate);
     };
 
-    // Update due date immediately
     updateDueDate();
 
-    // Set up an interval to check and update the due date daily
     const interval = setInterval(updateDueDate, 24 * 60 * 60 * 1000);
 
     return () => clearInterval(interval);
@@ -115,15 +116,12 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
           return;
         }
 
-        // Ensure the account number is properly formatted (remove any spaces or special characters)
         const formattedAccountNumber = accountNumber.trim();
         console.log('Fetching data for account:', formattedAccountNumber);
 
-        // Get the customer document reference
         const customerRef = doc(db, 'customers', formattedAccountNumber);
         console.log('Attempting to fetch document at path:', customerRef.path);
 
-        // Fetch the document
         const customerDoc = await getDoc(customerRef);
         console.log('Document exists:', customerDoc.exists());
 
@@ -131,7 +129,6 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
           const data = customerDoc.data();
           console.log('Raw Firestore data:', data);
 
-          // Convert the data to our CustomerData type
           const customerData: CustomerData = {
             accountNumber: formattedAccountNumber,
             accountHolderName: data.accountHolderName || userName,
@@ -236,14 +233,12 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   }, [accountNumber]);
 
   useEffect(() => {
-    // Handle redirects from payment gateway
     const tab = searchParams.get('tab');
     const action = searchParams.get('action');
     
     if (tab === 'payments' && action === 'arrangement') {
       console.log('Redirecting to payments tab with arrangement action');
       setCurrentView('payments');
-      // Add a small delay to ensure the Payment component is mounted
       setTimeout(() => {
         const paymentSection = document.getElementById('payment-arrangements');
         if (paymentSection) {
@@ -253,7 +248,6 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
     } else if (tab === 'query' && action === 'billing') {
       console.log('Redirecting to query tab with billing action');
       setCurrentView('query');
-      // Add a small delay to ensure the QueryForm component is mounted
       setTimeout(() => {
         const queryForm = document.getElementById('query-form');
         if (queryForm) {
@@ -262,6 +256,41 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
       }, 100);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    sessionManagerRef.current = new SessionManager(handleSessionTimeout, 5 * 60 * 1000);
+    sessionManagerRef.current.startMonitoring();
+    
+    console.log('Dashboard: Session timeout monitoring initialized');
+    
+    return () => {
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+        console.log('Dashboard: Session timeout monitoring stopped on unmount');
+      }
+    };
+  }, []);
+
+  const handleSessionTimeout = async () => {
+    console.log('Dashboard: Session timed out due to inactivity');
+    
+    if (accountNumber) {
+      try {
+        await trackUserActivity(accountNumber, 'session', 'Dashboard', {
+          action: 'timeout',
+          reason: 'inactivity',
+          duration: '5 minutes'
+        });
+      } catch (error) {
+        console.error('Error tracking session timeout:', error);
+      }
+    }
+    
+    // Always log out regardless of confirmation
+    // The confirm dialog is just for user notification
+    window.alert('Your session has expired due to inactivity. You will be logged out.');
+    await handleLogout();
+  };
 
   const handlePreferencesSave = async (newPreferences: CommunicationPreferences) => {
     try {
@@ -314,14 +343,12 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
 
   const formatFirestoreDate = (dateStr: string | null | undefined) => {
     console.log('Formatting date:', dateStr);
-    // Check if dateStr is valid
     if (!dateStr || typeof dateStr !== 'string') {
       console.log('Date string is invalid:', dateStr);
       return 'N/A';
     }
     
     try {
-      // Parse the date string from YYYYMMDD format
       const year = dateStr.substring(0, 4);
       const month = dateStr.substring(4, 6);
       const day = dateStr.substring(6, 8);
@@ -550,7 +577,11 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   const handleLogout = async () => {
     try {
       console.log('Initiating logout...');
-      // Call the onLogout prop function
+      
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+      }
+      
       await onLogout();
       console.log('Logout successful');
     } catch (error) {

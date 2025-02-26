@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DollarSign, FileText, Activity, MessageSquare, Users, CreditCard, Building2, MessageCircle } from 'lucide-react';
 import SuperAdminNav from './SuperAdminNav';
 import ChangeLog from './ChangeLog';
@@ -23,6 +23,9 @@ import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore
 import { db } from '../firebaseConfig';
 import '../styles/dashboard.css';
 import ReportsLayout from './ReportsLayout';
+import SessionManager from '../utils/sessionManager';
+import { trackUserActivity } from '../utils/activityTracker';
+import toast from 'react-hot-toast';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -34,6 +37,7 @@ const getGreeting = () => {
 export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void }) {
   const { isDarkMode } = useTheme();
   const { currentUser, userData } = useAuth();
+  const sessionManagerRef = useRef<SessionManager | null>(null);
 
   // Log user data for debugging
   useEffect(() => {
@@ -325,6 +329,70 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     }
   };
 
+  // Initialize session timeout manager
+  useEffect(() => {
+    // Create session manager with 5 minute timeout
+    sessionManagerRef.current = new SessionManager(handleSessionTimeout, 5 * 60 * 1000);
+    
+    // Start monitoring user activity
+    sessionManagerRef.current.startMonitoring();
+    
+    console.log('SuperAdminDashboard: Session timeout monitoring initialized');
+    
+    // Clean up on component unmount
+    return () => {
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+        console.log('SuperAdminDashboard: Session timeout monitoring stopped on unmount');
+      }
+    };
+  }, []);
+
+  // Handle session timeout
+  const handleSessionTimeout = async () => {
+    console.log('SuperAdminDashboard: Session timed out due to inactivity');
+    
+    // Track the timeout event
+    if (currentUser?.uid) {
+      try {
+        await trackUserActivity(currentUser.uid, 'session', 'SuperAdminDashboard', {
+          action: 'timeout',
+          reason: 'inactivity',
+          duration: '5 minutes',
+          userRole: 'superadmin'
+        });
+      } catch (error) {
+        console.error('Error tracking session timeout:', error);
+      }
+    }
+    
+    // Show a toast notification
+    toast.error('Your session has expired due to inactivity. You will be logged out.');
+    
+    // Perform logout after a short delay to allow the toast to be seen
+    setTimeout(async () => {
+      await handleLogout();
+    }, 1500);
+  };
+
+  // Modify the existing logout handler to stop session monitoring
+  const handleLogout = async () => {
+    try {
+      console.log('Initiating logout from SuperAdminDashboard...');
+      
+      // Stop session monitoring
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+      }
+      
+      // Call the onLogout prop function
+      await onLogout();
+      console.log('Logout successful');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
   // Fetch data when component mounts
   useEffect(() => {
     fetchActiveUsers();
@@ -337,7 +405,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     <div className={`min-h-screen ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
       <div className="flex flex-col h-screen">
         {/* Top Navigation */}
-        <SuperAdminNav onLogout={onLogout} onViewChange={setCurrentView} currentView={currentView} />
+        <SuperAdminNav onLogout={handleLogout} onViewChange={setCurrentView} currentView={currentView} />
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto">
@@ -347,7 +415,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
             ) : currentView === 'reports' ? (
               <ReportsLayout />
             ) : currentView === 'customerdashboard' ? (
-              <CustomerDashboard onLogout={onLogout} />
+              <CustomerDashboard onLogout={handleLogout} />
             ) : currentView === 'queries' ? (
               <div className="h-full">
                 <QueryManagement />

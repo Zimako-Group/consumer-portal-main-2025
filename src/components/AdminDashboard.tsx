@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, collection, addDoc, onSnapshot, updateDoc, getDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { ref, onValue } from 'firebase/database';
 import { db, realtimeDb } from '../firebaseConfig';
@@ -19,6 +19,8 @@ import NotificationBell from './NotificationBell';
 import ChangeLog from './ChangeLog';
 import { trackUserActivity } from '../utils/activityTracker';
 import { Notification } from '../types/notification';
+import SessionManager from '../utils/sessionManager';
+import toast from 'react-hot-toast';
 
 interface Profile {
   id: string;
@@ -51,6 +53,7 @@ function AdminDashboard({ onLogout, userEmail, userName, department }: AdminDash
   const [userDepartment, setUserDepartment] = useState<string>(department || '');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const sessionManagerRef = useRef<SessionManager | null>(null);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -67,6 +70,54 @@ function AdminDashboard({ onLogout, userEmail, userName, department }: AdminDash
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Initialize session timeout manager
+  useEffect(() => {
+    // Create session manager with 5 minute timeout
+    sessionManagerRef.current = new SessionManager(handleSessionTimeout, 5 * 60 * 1000);
+    
+    // Start monitoring user activity
+    sessionManagerRef.current.startMonitoring();
+    
+    console.log('AdminDashboard: Session timeout monitoring initialized');
+    
+    // Clean up on component unmount
+    return () => {
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+        console.log('AdminDashboard: Session timeout monitoring stopped on unmount');
+      }
+    };
+  }, []);
+
+  // Handle session timeout
+  const handleSessionTimeout = async () => {
+    console.log('AdminDashboard: Session timed out due to inactivity');
+    
+    // Track the timeout event
+    if (currentUser?.uid) {
+      try {
+        await trackUserActivity(currentUser.uid, 'session', 'AdminDashboard', {
+          action: 'timeout',
+          reason: 'inactivity',
+          duration: '5 minutes',
+          userRole: 'admin',
+          department: userDepartment
+        });
+      } catch (error) {
+        console.error('Error tracking session timeout:', error);
+      }
+    }
+    
+    // Show a toast notification
+    toast.error('Your session has expired due to inactivity. You will be logged out.');
+    
+    // Perform logout after a short delay to allow the toast to be seen
+    setTimeout(async () => {
+      await handleLogout();
+    }, 1500);
+  };
+
+  // Replace the existing activity tracking with our SessionManager
   useEffect(() => {
     let activityTimeout: NodeJS.Timeout;
 
@@ -376,12 +427,37 @@ function AdminDashboard({ onLogout, userEmail, userName, department }: AdminDash
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      console.log('Initiating logout from AdminDashboard...');
+      
+      // Stop session monitoring
+      if (sessionManagerRef.current) {
+        sessionManagerRef.current.stopMonitoring();
+      }
+      
+      // Call the onLogout prop function
+      await onLogout();
+      console.log('Logout successful');
+      
+      // Track logout activity
+      if (currentUser?.uid) {
+        await trackUserActivity(currentUser.uid, 'logout', 'AdminDashboard', {
+          method: 'user_initiated',
+          department: userDepartment
+        });
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-dark-bg">
       <AdminSidebar 
         onNavigate={setCurrentView} 
         currentView={currentView} 
-        onLogout={onLogout}
+        onLogout={handleLogout}
         userName={userName}
       />
       
