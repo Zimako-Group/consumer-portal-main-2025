@@ -16,6 +16,7 @@ import FeatureCard from './FeatureCard';
 import ZimakoAIChatBot from './ZimakoAIChatBot';
 import ActiveUsersCard from './analytics/ActiveUsersCard';
 import AdminMeterReadings from './AdminMeterReadings';
+import WhatsAppDashboard from './WhatsAppDashboard';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import jellyfishBg from '../assets/jellyfish-bg.svg';
@@ -45,7 +46,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     console.log('User Data:', userData);
   }, [currentUser, userData]);
 
-  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
@@ -432,6 +433,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               <div className="p-8">
                 <AdminMeterReadings />
               </div>
+            ) : currentView === 'whatsapp-dashboard' ? (
+              <WhatsAppDashboard />
             ) : (
               // Dashboard View with new greeting and stats cards
               <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">

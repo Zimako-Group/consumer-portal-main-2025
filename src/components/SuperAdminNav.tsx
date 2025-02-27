@@ -30,8 +30,8 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
-  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings') => void;
-  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings';
+  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard') => void;
+  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard';
 }
 
 interface NavItem {
@@ -97,6 +97,12 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, c
       icon: <Activity className="w-5 h-5" />, 
       href: '#',
       action: () => onViewChange('meter-readings')
+    },
+    { 
+      name: 'WhatsApp Dashboard', 
+      icon: <MessageSquare className="w-5 h-5" />, 
+      href: '#',
+      action: () => onViewChange('whatsapp-dashboard')
     },
     {
       name: 'Users',

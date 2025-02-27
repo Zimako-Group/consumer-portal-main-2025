@@ -17,6 +17,8 @@ import AdminSettings from './AdminSettings';
 import AdminHelp from './AdminHelp';
 import NotificationBell from './NotificationBell';
 import ChangeLog from './ChangeLog';
+import WhatsAppDashboard from './WhatsAppDashboard';
+import WhatsAppSettings from './WhatsAppSettings';
 import { trackUserActivity } from '../utils/activityTracker';
 import { Notification } from '../types/notification';
 import SessionManager from '../utils/sessionManager';
@@ -406,8 +408,10 @@ function AdminDashboard({ onLogout, userEmail, userName, department }: AdminDash
         return (
           <AccountsView
             profiles={profiles}
-            onCreateProfile={() => setIsCreateProfileModalOpen(true)}
-            onEditProfile={handleEditProfile}
+            onEdit={(profile) => {
+              setSelectedProfile(profile);
+              setIsEditProfileModalOpen(true);
+            }}
           />
         );
       case 'reminders':
@@ -416,10 +420,15 @@ function AdminDashboard({ onLogout, userEmail, userName, department }: AdminDash
         return <QueryManagement />;
       case 'meters':
         return <AdminMeterReadings />;
+      case 'whatsapp':
+        return (
+          <div className="space-y-8">
+            <WhatsAppDashboard />
+            <WhatsAppSettings />
+          </div>
+        );
       case 'help':
-        return <AdminHelp onNavigateToChangelog={() => setCurrentView('changelog')} />;
-      case 'changelog':
-        return <ChangeLog />;
+        return <AdminHelp />;
       case 'settings':
         return <AdminSettings />;
       default:

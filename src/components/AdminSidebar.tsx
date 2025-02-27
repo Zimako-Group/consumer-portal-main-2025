@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   LogOut,
-  HelpCircle
+  HelpCircle,
+  MessageCircle
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import sidebarLogo from '../assets/sidebar-logo.png';
@@ -35,6 +36,7 @@ const sidebarItems: SidebarItem[] = [
   { name: 'Payment Reminders', icon: <Bell className="w-5 h-5" />, view: 'reminders' },
   { name: 'Queries', icon: <MessageSquare className="w-5 h-5" />, view: 'queries' },
   { name: 'Meter Readings', icon: <Gauge className="w-5 h-5" />, view: 'meters' },
+  { name: 'WhatsApp', icon: <MessageCircle className="w-5 h-5" />, view: 'whatsapp' },
   { name: 'Help', icon: <HelpCircle className="w-5 h-5" />, view: 'help' },
   { name: 'Settings', icon: <Settings className="w-5 h-5" />, view: 'settings' },
 ];

@@ -29,10 +29,16 @@ const bucket = admin.storage().bucket();
 // Import routes
 const adminUsersRouter = require('./routes/adminUsers');
 const communicationsRouter = require('./routes/communications');
+const whatsappRouter = require('./routes/whatsapp');
+const whatsappMessagesRouter = require('./routes/whatsappMessages');
+const adminRouter = require('./routes/admin');
 
 // Use routes
 app.use('/api', adminUsersRouter);
 app.use('/api', communicationsRouter);
+app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/whatsapp', whatsappMessagesRouter);
+app.use('/api/admin', adminRouter);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
