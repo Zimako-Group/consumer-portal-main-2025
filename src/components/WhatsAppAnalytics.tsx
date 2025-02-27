@@ -55,7 +55,7 @@ const WhatsAppAnalytics: React.FC = () => {
     setLoading(true);
     try {
       // Use the new API endpoint for analytics
-      const response = await axios.get(`/api/admin/whatsapp/analytics?days=${timeRange}`);
+      const response = await axios.get(`/api/whatsapp/analytics?days=${timeRange}`);
       const data = response.data;
       
       // Set basic metrics

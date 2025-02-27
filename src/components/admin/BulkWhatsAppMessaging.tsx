@@ -54,7 +54,7 @@ const BulkWhatsAppMessaging: React.FC = () => {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/admin/whatsapp/templates');
+      const response = await axios.get('/api/whatsapp/templates');
       setTemplates(response.data);
       setLoading(false);
     } catch (error) {
@@ -91,7 +91,7 @@ const BulkWhatsAppMessaging: React.FC = () => {
       }
       
       // Send request
-      const response = await axios.post('/api/admin/whatsapp/bulk-message', requestBody);
+      const response = await axios.post('/api/whatsapp/bulk-message', requestBody);
       setResult(response.data);
       
       // Show success message

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const db = admin.firestore();
+const { WhatsAppService } = require('../../src/services/whatsapp/whatsappService');
+const { requireAuth } = require('../middleware/auth');
 
 // WhatsApp webhook verification endpoint
 router.get('/webhook', (req, res) => {
@@ -285,5 +287,62 @@ async function sendWhatsAppMessage(to, message) {
     throw error;
   }
 }
+
+// WhatsApp Analytics
+router.get('/analytics', requireAuth, async (req, res) => {
+  try {
+    const days = req.query.days ? parseInt(req.query.days) : 30;
+    const whatsappService = new WhatsAppService();
+    const analytics = await whatsappService.getMessageAnalytics(days);
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching WhatsApp analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp analytics' });
+  }
+});
+
+// WhatsApp Templates with Status
+router.get('/templates', requireAuth, async (req, res) => {
+  try {
+    const whatsappService = new WhatsAppService();
+    const templates = await whatsappService.getMessageTemplatesWithStatus();
+    res.json(templates);
+  } catch (error) {
+    console.error('Error fetching WhatsApp templates:', error);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp templates' });
+  }
+});
+
+// Send Bulk WhatsApp Messages
+router.post('/bulk-message', requireAuth, async (req, res) => {
+  try {
+    const { recipients, messageType, content, templateParams } = req.body;
+    
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({ error: 'Recipients array is required' });
+    }
+    
+    if (!messageType || !['text', 'template'].includes(messageType)) {
+      return res.status(400).json({ error: 'Valid messageType is required (text or template)' });
+    }
+    
+    if (!content) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+    
+    // For template messages, validate template parameters
+    if (messageType === 'template' && !templateParams) {
+      return res.status(400).json({ error: 'Template parameters are required for template messages' });
+    }
+    
+    const whatsappService = new WhatsAppService();
+    const result = await whatsappService.sendBulkMessages(recipients, messageType, content, templateParams);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error sending bulk WhatsApp messages:', error);
+    res.status(500).json({ error: 'Failed to send bulk WhatsApp messages' });
+  }
+});
 
 module.exports = router;

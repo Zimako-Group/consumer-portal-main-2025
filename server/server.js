@@ -40,6 +40,9 @@ app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/whatsapp', whatsappMessagesRouter);
 app.use('/api/admin', adminRouter);
 
+// WhatsApp routes
+app.use('/api/whatsapp', require('./routes/whatsapp'));
+
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is running!' });
