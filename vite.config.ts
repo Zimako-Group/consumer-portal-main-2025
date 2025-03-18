@@ -59,7 +59,7 @@ export default defineConfig({
     },
     terserOptions: {
       compress: {
-        drop_console: true,
+        drop_console: false, // Changed to false to help with debugging
         drop_debugger: true,
       },
     },
