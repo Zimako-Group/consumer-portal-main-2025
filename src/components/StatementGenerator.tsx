@@ -12,13 +12,21 @@ import capitecLogo from '../assets/bank-logos/capitec-logo.png';
 import africanBankLogo from '../assets/bank-logos/africanbank-logo.png';
 import yebopayLogo from '../assets/bank-logos/yebopay-logo.png';
 import postOfficeLogo from '../assets/bank-logos/postoffice-logo.png';
-import { getMeterReadingsForCustomer, MeterReading } from '../services/meterReadingService';
+import { getMeterReadingsForCustomer } from '../services/meterReadingService';
 import { getDetailedLeviedForCustomer } from '../services/detailedLeviedService';
-import { getCustomerOutstandingBalanceData } from '../services/customerService';
-import { getAgingAnalysisForCustomer } from '../services/agingAnalysisService';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import PaymentGateway from './PaymentGateway';
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => void;
+    lastAutoTable: {
+      finalY: number;
+    };
+  }
+}
 
 interface CustomerData {
   accountHolderName: string;
@@ -49,6 +57,15 @@ interface CustomerData {
   };
 }
 
+// Interface for account details data
+interface AccountDetailsData {
+  code?: string;
+  description?: string;
+  units?: string | number;
+  tariff?: string | number;
+  value?: number;
+}
+
 interface CustomerInput {
   accountNumber: string;
   month: string;
@@ -65,44 +82,6 @@ interface StatementGeneratorState {
 }
 
 class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
-  private bankingLinks = [
-    { 
-      name: 'ABSA', 
-      url: 'https://www.absa.co.za/personal/', 
-      logo: absaLogo 
-    },
-    { 
-      name: 'FNB', 
-      url: 'https://www.fnb.co.za/ways-to-bank/online-banking.html', 
-      logo: fnbLogo 
-    },
-    { 
-      name: 'Standard Bank', 
-      url: 'https://onlinebanking.standardbank.co.za/#/landing-page', 
-      logo: standardBankLogo 
-    },
-    { 
-      name: 'Nedbank', 
-      url: 'https://secured.nedbank.co.za/#/login', 
-      logo: nedbankLogo 
-    },
-    { 
-      name: 'Capitec', 
-      url: 'https://www.capitecbank.co.za/personal/transact/online-banking/', 
-      logo: capitecLogo 
-    },
-    { 
-      name: 'African Bank', 
-      url: 'https://ib.africanbank.co.za/SignIn.aspx', 
-      logo: africanBankLogo 
-    },
-    { 
-      name: 'Post Office', 
-      url: 'https://www.postoffice.co.za/', 
-      logo: postOfficeLogo 
-    }
-  ];
-
   constructor(props: {}) {
     super(props);
     this.state = {
@@ -283,7 +262,28 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const municipalLogoX = margin.left - 8; // Moved left by 8mm
       const municipalLogoY = margin.top - 8; // Moved up further by 3mm (from -5 to -8)
 
-      doc.addImage(logoImage, 'JPEG', municipalLogoX, municipalLogoY, municipalLogoWidth, municipalLogoHeight);
+      // Add municipal logo with error handling
+      try {
+        doc.addImage({
+          imageData: logoImage,
+          format: 'JPEG',
+          x: municipalLogoX,
+          y: municipalLogoY,
+          width: municipalLogoWidth,
+          height: municipalLogoHeight,
+          compression: 'MEDIUM',
+          alias: 'municipal-logo'
+        });
+      } catch (error) {
+        console.warn('Failed to add municipal logo:', error);
+        // Draw a placeholder rectangle with text
+        doc.setDrawColor(200, 200, 200);
+        doc.setFillColor(240, 240, 240);
+        doc.rect(municipalLogoX, municipalLogoY, municipalLogoWidth, municipalLogoHeight, 'FD');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text('MOHOKARE', municipalLogoX + (municipalLogoWidth/2), municipalLogoY + (municipalLogoHeight/2), { align: 'center' });
+      }
       
       // Municipality details - adjusted right position
       doc.setFontSize(10);
@@ -587,7 +587,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       currentY += 2; // Reduced from 6
 
       // Helper function to draw detail rows
-      const drawDetailRow = (x: number, y: number, label: string, value: string, width: number) => {
+      const drawDetailRow = (x: number, y: number, label: string, value: string) => {
         const cellHeight = 4;
         doc.setFillColor(240, 240, 240);
         
@@ -606,13 +606,13 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       };
 
       // Draw remittance advice details
-      drawDetailRow(leftColumnX, currentY + 4, 'ACCOUNT NUMBER:', customerData.accountNumber || '', columnWidth);
-      drawDetailRow(leftColumnX, currentY + 8, 'CONSUMER NAME:', customerData.accountHolderName || '', columnWidth);
-      drawDetailRow(leftColumnX, currentY + 12, 'TOTAL DUE:', `R ${customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`, columnWidth);
-      drawDetailRow(leftColumnX, currentY + 16, 'TOTAL DUE ON OR BEFORE:', '2024-09-31', columnWidth);
+      drawDetailRow(leftColumnX, currentY + 4, 'ACCOUNT NUMBER:', customerData.accountNumber || '');
+      drawDetailRow(leftColumnX, currentY + 8, 'CONSUMER NAME:', customerData.accountHolderName || '');
+      drawDetailRow(leftColumnX, currentY + 12, 'TOTAL DUE:', `R ${customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`);
+      drawDetailRow(leftColumnX, currentY + 16, 'TOTAL DUE ON OR BEFORE:', '2024-09-31');
 
       // Draw banking details with consistent alignment
-      const drawBankingDetailRow = (x: number, y: number, label: string, value: string, width: number) => {
+      const drawBankingDetailRow = (x: number, y: number, label: string, value: string) => {
         const cellHeight = 4;
         doc.setFillColor(240, 240, 240);
         
@@ -630,11 +630,11 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       };
 
       // Draw banking details
-      drawBankingDetailRow(rightColumnX, currentY + 4, 'BANK NAME:', 'ABSA', columnWidth);
-      drawBankingDetailRow(rightColumnX, currentY + 8, 'ACCOUNT NAME:', 'Mohokare Local Municipality', columnWidth);
-      drawBankingDetailRow(rightColumnX, currentY + 12, 'ACCOUNT NUMBER:', '4052654487', columnWidth);
-      drawBankingDetailRow(rightColumnX, currentY + 16, 'BRANCH CODE:', '250655', columnWidth);
-      drawBankingDetailRow(rightColumnX, currentY + 20, 'REFERENCE:', customerData.accountNumber || '', columnWidth);
+      drawBankingDetailRow(rightColumnX, currentY + 4, 'BANK NAME:', 'ABSA');
+      drawBankingDetailRow(rightColumnX, currentY + 8, 'ACCOUNT NAME:', 'Mohokare Local Municipality');
+      drawBankingDetailRow(rightColumnX, currentY + 12, 'ACCOUNT NUMBER:', '4052654487');
+      drawBankingDetailRow(rightColumnX, currentY + 16, 'BRANCH CODE:', '250655');
+      drawBankingDetailRow(rightColumnX, currentY + 20, 'REFERENCE:', customerData.accountNumber || '');
 
       currentY += 30;
 
@@ -663,14 +663,33 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         { src: postOfficeLogo, x: 138, width: 10, url: 'https://www.postoffice.co.za/' }
       ];
 
-      bankLogos.forEach(logo => {
-        // Add clickable link area
-        doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
-        // Add the logo image
-        doc.addImage(logo.src, 'PNG', logo.x, currentY, logo.width, 7);
-      });
+      // Safely add bank logos with error handling
+      for (const logo of bankLogos) {
+        try {
+          // Add clickable link area
+          doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
+          
+          // Add the logo image with error handling
+          doc.addImage({
+            imageData: logo.src,
+            format: 'PNG',
+            x: logo.x,
+            y: currentY,
+            width: logo.width,
+            height: 7,
+            compression: 'NONE',
+            alias: `bank-logo-${logo.url.replace(/[^a-zA-Z0-9]/g, '-')}`
+          });
+        } catch (error) {
+          console.warn(`Failed to add bank logo for ${logo.url}:`, error);
+          // Draw a placeholder rectangle instead
+          doc.setDrawColor(200, 200, 200);
+          doc.setFillColor(240, 240, 240);
+          doc.rect(logo.x, currentY, logo.width, 7, 'FD');
+        }
+      }
 
-      currentY += 10; // Reduced spacing after logos
+      currentY += 10;
 
       // Add dividing line after bank logos
       doc.setLineWidth(0.3);
@@ -698,15 +717,28 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Add clickable link to the logo
       doc.link(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, { url: paymentUrl });
 
-      // Add YeboPay logo
-      doc.addImage(
-        yebopayLogo,
-        'PNG',
-        yeboPayLogoX,
-        yeboPayLogoY,
-        yeboPayLogoWidth,
-        yeboPayLogoHeight
-      );
+      // Add YeboPay logo with error handling
+      try {
+        doc.addImage({
+          imageData: yebopayLogo,
+          format: 'PNG',
+          x: yeboPayLogoX,
+          y: yeboPayLogoY,
+          width: yeboPayLogoWidth,
+          height: yeboPayLogoHeight,
+          compression: 'NONE',
+          alias: 'yebopay-logo'
+        });
+      } catch (error) {
+        console.warn('Failed to add YeboPay logo:', error);
+        // Draw a placeholder rectangle with text
+        doc.setDrawColor(200, 200, 200);
+        doc.setFillColor(240, 240, 240);
+        doc.rect(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, 'FD');
+        doc.setFontSize(8);
+        doc.setTextColor(0, 0, 0);
+        doc.text('YeboPay', yeboPayLogoX + (yeboPayLogoWidth/2), yeboPayLogoY + (yeboPayLogoHeight/2), { align: 'center' });
+      }
 
       currentY += yeboPayLogoHeight + 3; // Reduced spacing after logo from 5 to 3
 
