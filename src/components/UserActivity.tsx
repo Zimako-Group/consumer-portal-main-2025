@@ -95,11 +95,17 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
 interface UserActivityProps {
   itemLimit?: number;
   showPagination?: boolean;
+  externalActivities?: Array<{
+    type: string;
+    description: string;
+    date: string;
+  }>;
 }
 
 const UserActivityComponent: React.FC<UserActivityProps> = ({
   itemLimit = 5,
   showPagination = true,
+  externalActivities = [],
 }) => {
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,13 +136,25 @@ const UserActivityComponent: React.FC<UserActivityProps> = ({
       const fetchedActivities: UserActivity[] = [];
 
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
+        const data = doc.data() as {
+          userId: string;
+          type: string;
+          description: string;
+          timestamp: any;
+          metadata?: {
+            amount?: number;
+            meterNumber?: string;
+            queryType?: string;
+            statementMonth?: string;
+          };
+        };
+
         fetchedActivities.push({
           id: doc.id,
           userId: data.userId,
           type: data.type,
           description: data.description,
-          timestamp: data.timestamp?.toDate() || new Date(data.timestamp),
+          timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp),
           metadata: data.metadata
         });
       });
@@ -147,13 +165,13 @@ const UserActivityComponent: React.FC<UserActivityProps> = ({
       // Store query for next page if there are more items
       if (querySnapshot.docs.length === itemLimit) {
         const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
-        const nextPageQuery = query(
+        const nextPageQuery = currentUser ? query(
           collection(db, 'userActivities'),
           where('userId', '==', currentUser.uid),
           orderBy('timestamp', 'desc'),
           startAfter(lastDoc),
           limit(itemLimit)
-        );
+        ) : null;
         setPageQueries(prev => {
           const newQueries = [...prev];
           newQueries[currentPage] = nextPageQuery;
@@ -168,12 +186,28 @@ const UserActivityComponent: React.FC<UserActivityProps> = ({
   };
 
   useEffect(() => {
+    // Convert external activities to UserActivity format if provided
+    if (externalActivities && externalActivities.length > 0) {
+      const formattedExternalActivities: UserActivity[] = externalActivities.map((activity, index) => ({
+        id: `external-${index}`,
+        userId: currentUser ? currentUser.uid : 'external',
+        type: activity.type,
+        description: activity.description,
+        timestamp: new Date(activity.date),
+      }));
+      
+      setActivities(formattedExternalActivities);
+      setLoading(false);
+      return;
+    }
+    
+    // Otherwise fetch from Firebase as usual
     const baseQuery = createBaseQuery();
     if (baseQuery) {
       setPageQueries([baseQuery]);
       fetchActivities(baseQuery);
     }
-  }, [currentUser, itemLimit]);
+  }, [currentUser, itemLimit, externalActivities]);
 
   const handleNextPage = async () => {
     if (hasMore && pageQueries[currentPage]) {

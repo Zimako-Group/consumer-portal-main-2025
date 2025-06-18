@@ -12,6 +12,11 @@ interface UserAccountProps {
   lastPaymentDate: string;
   lastAmountPaid: string;
   accountType: string;
+  arrangements: {
+    accountNumber: string;
+    arrangementDate: string;
+    amountArranged: string;
+  }[];
   preferences: {
     sms: { enabled: boolean; value: string };
     whatsapp: { enabled: boolean; value: string };

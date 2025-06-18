@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { FileText, CreditCard, Activity, MessageSquare, Menu, HandshakeIcon, HelpCircle, UserPlus } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { FileText, CreditCard, Activity, MessageSquare, Menu, HandshakeIcon, UserPlus } from 'lucide-react';
 import { getGreeting, getSASTHour } from '../utils/timeUtils';
 import { db } from '../firebaseConfig';
-import { doc, getDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { format, lastDayOfMonth } from 'date-fns';
 import Sidebar from './Sidebar';
 import Settings from './Settings';
@@ -19,6 +19,7 @@ import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import SessionManager from '../utils/sessionManager';
 import { trackUserActivity } from '../utils/activityTracker';
+import { CommunicationPreferences } from '../types';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -51,12 +52,6 @@ interface RecentActivity {
   date: string;
 }
 
-interface CommunicationPreferences {
-  sms: { enabled: boolean; value: string };
-  whatsapp: { enabled: boolean; value: string };
-  email: { enabled: boolean; value: string };
-}
-
 export default function Dashboard({ onLogout, userEmail, userName, accountNumber }: DashboardProps) {
   console.log('Dashboard rendered with props:', { userEmail, userName, accountNumber });
 
@@ -65,7 +60,6 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   const [currentView, setCurrentView] = useState('dashboard');
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [currentDueDate, setCurrentDueDate] = useState('');
   const [preferences, setPreferences] = useState<CommunicationPreferences>({
     sms: { enabled: false, value: '' },
@@ -73,6 +67,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
     email: { enabled: false, value: '' }
   });
   const [showIndigentModal, setShowIndigentModal] = useState(false);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const sessionManagerRef = useRef<SessionManager | null>(null);
@@ -192,47 +187,6 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
   }, [accountNumber, userName, userEmail, currentDueDate]);
 
   useEffect(() => {
-    const fetchRecentActivities = async () => {
-      if (!accountNumber) {
-        console.log('No account number available, skipping activities fetch');
-        return;
-      }
-
-      try {
-        const activitiesRef = collection(db, 'activities');
-        const q = query(
-          activitiesRef, 
-          where('accountNumber', '==', accountNumber.trim()), 
-          orderBy('date', 'desc'), 
-          limit(3)
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const activities: RecentActivity[] = [];
-        
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.date) {
-            activities.push({
-              type: data.type || 'Unknown',
-              description: data.description || 'No description available',
-              date: data.date.toDate ? format(data.date.toDate(), 'dd MMM yyyy') : format(new Date(data.date), 'dd MMM yyyy')
-            });
-          }
-        });
-        
-        console.log('Fetched recent activities:', activities);
-        setRecentActivities(activities);
-      } catch (error) {
-        console.error('Error fetching recent activities:', error);
-        setRecentActivities([]);
-      }
-    };
-
-    fetchRecentActivities();
-  }, [accountNumber]);
-
-  useEffect(() => {
     const tab = searchParams.get('tab');
     const action = searchParams.get('action');
     
@@ -314,7 +268,7 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
       };
 
       console.log('Adding new activity:', newActivity);
-      setRecentActivities(prev => [newActivity, ...prev]);
+      setRecentActivities((prev: RecentActivity[]) => [newActivity, ...prev]);
       
       return Promise.resolve();
     } catch (error) {
@@ -404,8 +358,8 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
               userName={userName}
               accountNumber={accountNumber}
               accountType={customerData?.accountType || 'N/A'}
-              lastPaymentDate={customerData?.lastPaymentDate}
-              lastAmountPaid={customerData?.lastPaymentAmount}
+              lastPaymentDate={customerData?.lastPaymentDate || 'N/A'}
+              lastAmountPaid={customerData?.lastPaymentAmount?.toString() || 'N/A'}
               arrangements={[
                 {
                   accountNumber: accountNumber,
@@ -503,68 +457,94 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
             <>
-              <div className="mb-8 mt-16 lg:mt-0">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{greeting}</h1>
+              <div className="mb-10 mt-16 lg:mt-0">
+                <div className="relative">
+                  <div className="absolute -left-3 -top-3 w-16 h-16 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full opacity-20 blur-xl"></div>
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white relative">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">{greeting}</span>
+                  </h1>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 sm:gap-7 mb-10">
                 {stats.map((stat, index) => (
-                  <div key={index} className="bg-white dark:bg-dark-card p-4 sm:p-6 rounded-lg shadow-sm">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</p>
-                    <p className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">{stat.value}</p>
+                  <div key={index} className="bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 p-5 sm:p-7 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-all duration-300">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-300">{stat.label}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-2">{stat.value}</p>
                   </div>
                 ))}
                 <button 
                   onClick={() => setCurrentView('statements')}
-                  className="flex flex-col items-center justify-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center justify-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">View Statement</span>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">View Statement</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 sm:gap-6 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-5 sm:gap-7 mb-8">
                 <button 
                   onClick={() => setCurrentView('payment')}
-                  className="flex flex-col items-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <CreditCard className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">Settle Account</span>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <CreditCard className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">Settle Account</span>
                 </button>
                 <button 
                   onClick={() => setCurrentView('payment')}
-                  className="flex flex-col items-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <HandshakeIcon className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">Make Arrangement</span>
+                  <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <HandshakeIcon className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">Make Arrangement</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('readings')}
-                  className="flex flex-col items-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">Submit Reading</span>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">Submit Reading</span>
                 </button>
                 <button
                   onClick={() => setCurrentView('query')}
-                  className="flex flex-col items-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">Log Query</span>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">Log Query</span>
                 </button>
                 <button
                   onClick={() => setShowIndigentModal(true)}
-                  className="flex flex-col items-center p-4 sm:p-6 bg-white dark:bg-dark-card rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  className="flex flex-col items-center p-5 sm:p-7 bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 group"
                 >
-                  <UserPlus className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
-                  <span className="text-sm sm:text-base text-gray-900 dark:text-white mt-2">Apply for Indigent</span>
+                  <div className="bg-teal-50 dark:bg-teal-900/20 p-3 rounded-full mb-3 group-hover:scale-110 transition-all duration-300">
+                    <UserPlus className="w-6 h-6 sm:w-8 sm:h-8 text-theme" />
+                  </div>
+                  <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-white">Apply for Indigent</span>
                 </button>
               </div>
 
-              <div className="mt-8">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h2>
-                <div className="bg-white dark:bg-dark-card shadow-sm rounded-lg">
-                  <UserActivityComponent itemLimit={3} showPagination={false} />
+              <div className="mt-10">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-5 flex items-center">
+                  <span className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg mr-3">
+                    <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </span>
+                  Recent Activity
+                </h2>
+                <div className="bg-gradient-to-br from-white to-gray-50 dark:from-dark-card dark:to-gray-800 shadow-lg rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <UserActivityComponent 
+                    itemLimit={3} 
+                    showPagination={false} 
+                    externalActivities={recentActivities}
+                  />
                 </div>
               </div>
             </>
@@ -633,21 +613,22 @@ export default function Dashboard({ onLogout, userEmail, userName, accountNumber
         <IndigentApplication onClose={() => setShowIndigentModal(false)} />
       )}
       
-      <footer className="lg:ml-64 py-4 px-6">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Powered By: {' '}
+      <footer className="lg:ml-64 py-6 px-8 border-t border-gray-200 dark:border-gray-700 mt-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+          <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
+            <span className="mr-2">Powered By:</span>
             <a 
               href="https://zimako.co.za/" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="hover:text-blue-800 dark:hover:text-blue-400 transition-colors"
+              className="font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center"
             >
-              Zimako Group
+              <span className="bg-gradient-to-r from-blue-500 to-purple-500 h-5 w-5 rounded-full mr-2"></span>
+              Zimako Smart Business Solutions
             </a>
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            Version (2) 24 February 2024
+          <div className="text-sm font-medium bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500 dark:text-gray-400">
+            Version (2) 18 June 2025
           </div>
         </div>
       </footer>
