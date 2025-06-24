@@ -6,10 +6,11 @@ import { Link as ScrollLink } from 'react-scroll';
 import AuthModal from './AuthModal';
 
 interface NavbarProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (email: string) => void;
+  onNewUserSignup: (email: string, name: string) => void;
 }
 
-export default function Navbar({ onLoginSuccess }: NavbarProps) {
+export default function Navbar({ onLoginSuccess, onNewUserSignup }: NavbarProps) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -183,6 +184,7 @@ export default function Navbar({ onLoginSuccess }: NavbarProps) {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={onLoginSuccess}
+        onNewUserSignup={onNewUserSignup}
       />
     </>
   );

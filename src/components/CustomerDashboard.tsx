@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { CustomerData } from '../services/customerService';
-import { Download, FileDown, CheckSquare, Square, BarChart2, Phone, MessageSquare, Mail, X, Search, Filter } from 'lucide-react';
+import { Download, FileDown, CheckSquare, Square, BarChart2, X, Search, Filter } from 'lucide-react';
 import CustomerDetailsModalContainer from './CustomerDetailsModal';
 import ReportModal from './ReportModal';
 import { Toaster } from 'react-hot-toast';
@@ -13,29 +13,23 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { generateStatement } from './StatementGenerator';
 import { useDebounce } from '../hooks/useDebounce';
-import { FixedSizeList as List } from 'react-window';
 import { useTheme } from '../contexts/ThemeContext';
 
-interface CustomerData {
-  id: string;
+interface CustomerDashboardProps {
+  onLogout: () => Promise<boolean>;
+  userEmail: string;
+  userName: string;
   accountNumber: string;
-  accountHolderName: string;
-  accountStatus: string;
-  accountType: string;
-  outstandingTotalBalance: number;
-  lastPaymentAmount: number;
-  lastPaymentDate: string;
-  dueDate: string;
-  communicationPreferences?: {
-    sms: { enabled: boolean; value: string };
-    whatsapp: { enabled: boolean; value: string };
-    email: { enabled: boolean; value: string };
-  };
 }
 
 const PAGE_SIZE = 10;
 
-const CustomerDashboard: React.FC = () => {
+const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ 
+  onLogout, 
+  userEmail, 
+  userName, 
+  accountNumber 
+}) => {
   const { isDarkMode } = useTheme();
   const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -482,11 +476,11 @@ const CustomerDashboard: React.FC = () => {
         <div className="p-4 truncate hidden md:block">{customer.idNumber || 'N/A'}</div>
         <div className="p-4 truncate">
           <span className={`font-medium ${
-            customer.outstandingTotalBalance > 0
+            customer.outstandingBalance > 0
               ? isDarkMode ? 'text-red-400' : 'text-red-600'
               : isDarkMode ? 'text-green-400' : 'text-green-600'
           }`}>
-            R {customer.outstandingTotalBalance?.toFixed(2)}
+            R {customer.outstandingBalance?.toFixed(2)}
           </span>
         </div>
         <div className="p-4">
@@ -560,6 +554,30 @@ const CustomerDashboard: React.FC = () => {
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          {/* User Info */}
+          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{userName}</span>
+              <span className="text-sm text-gray-500">{userEmail}</span>
+              {accountNumber && (
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                  Account: {accountNumber}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={onLogout}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors duration-200 ${
+                isDarkMode
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-red-500 hover:bg-red-600 text-white'
+              }`}
+            >
+              <X className="h-5 w-5" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
+
           {/* Search and Filter */}
           <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
             <div className={`relative flex-grow max-w-md ${
