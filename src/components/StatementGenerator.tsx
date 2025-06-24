@@ -669,17 +669,18 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           // Add clickable link area
           doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
           
+          // Convert image to base64 if it's not already
+          const imgData = typeof logo.src === 'string' ? logo.src : logo.src.toString('base64');
+          
           // Add the logo image with error handling
-          doc.addImage({
-            imageData: logo.src,
-            format: 'PNG',
-            x: logo.x,
-            y: currentY,
-            width: logo.width,
-            height: 7,
-            compression: 'NONE',
-            alias: `bank-logo-${logo.url.replace(/[^a-zA-Z0-9]/g, '-')}`
-          });
+          doc.addImage(
+            imgData,
+            'PNG',
+            logo.x,
+            currentY,
+            logo.width,
+            7
+          );
         } catch (error) {
           console.warn(`Failed to add bank logo for ${logo.url}:`, error);
           // Draw a placeholder rectangle instead
@@ -719,16 +720,18 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
 
       // Add YeboPay logo with error handling
       try {
-        doc.addImage({
-          imageData: yebopayLogo,
-          format: 'PNG',
-          x: yeboPayLogoX,
-          y: yeboPayLogoY,
-          width: yeboPayLogoWidth,
-          height: yeboPayLogoHeight,
-          compression: 'NONE',
-          alias: 'yebopay-logo'
-        });
+        // Convert image to base64 if it's not already
+        const imgData = typeof yebopayLogo === 'string' ? yebopayLogo : yebopayLogo.toString('base64');
+        
+        // Add the YeboPay logo image with simplified parameters
+        doc.addImage(
+          imgData,
+          'PNG',
+          yeboPayLogoX,
+          yeboPayLogoY,
+          yeboPayLogoWidth,
+          yeboPayLogoHeight
+        );
       } catch (error) {
         console.warn('Failed to add YeboPay logo:', error);
         // Draw a placeholder rectangle with text

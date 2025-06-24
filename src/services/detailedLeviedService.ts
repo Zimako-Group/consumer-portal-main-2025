@@ -55,6 +55,7 @@ export interface DetailedLevied {
 export interface AccountDetailsData {
     code: string;      // TARIFF_CODE
     description: string; // TOS_DESC
+    units?: string | number; // Adding units property to match StatementGenerator.tsx
     tariff: string;    // TOS_DESC
     value: number;     // M202407
     date: string;      // Current date
@@ -209,6 +210,7 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string): Promi
             accountDetails.push({
                 code: data.TARIFF_CODE,
                 description: data.TOS_DESC,
+                units: '1', // Adding a default units value
                 tariff: data.TOS_DESC,
                 value: data.M202409,
                 date: currentDate
