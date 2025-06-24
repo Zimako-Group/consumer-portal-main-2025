@@ -1,7 +1,12 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { CustomerData } from '../services/customerService';
+import { CustomerData as BaseCustomerData } from '../services/customerService';
+
+// Extended CustomerData interface to include properties from different data sources
+interface CustomerData extends BaseCustomerData {
+  outstandingTotalBalance?: number;
+}
 import { Download, FileDown, CheckSquare, Square, BarChart2, X, Search, Filter } from 'lucide-react';
 import CustomerDetailsModalContainer from './CustomerDetailsModal';
 import ReportModal from './ReportModal';
@@ -59,15 +64,45 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   const fetchAllCustomers = async () => {
     try {
+      setLoading(true);
+      // Fetch basic customer data
       const customersQuery = query(collection(db, 'customers'), orderBy(selectedFilter));
       const snapshot = await getDocs(customersQuery);
-      const customerList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as CustomerData[];
+      
+      // Fetch balance data from the balances collection if it exists
+      const balancesQuery = query(collection(db, 'customer_balances'));
+      const balancesSnapshot = await getDocs(balancesQuery);
+      
+      // Create a map of account numbers to balance data
+      const balancesMap = new Map();
+      balancesSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.accountNumber) {
+          balancesMap.set(data.accountNumber, data);
+        }
+      });
+      
+      // Merge customer data with balance data
+      const customerList = snapshot.docs.map(doc => {
+        const customerData = doc.data();
+        const accountNumber = doc.id;
+        const balanceData = balancesMap.get(accountNumber);
+        
+        return {
+          id: doc.id,
+          ...customerData,
+          // Use outstandingTotalBalance from balances collection if available,
+          // otherwise fall back to outstandingBalance from customer data
+          outstandingTotalBalance: balanceData?.outstandingTotalBalance || customerData.outstandingBalance || 0
+        };
+      }) as CustomerData[];
+      
       setAllCustomers(customerList);
     } catch (error) {
       console.error('Error fetching all customers:', error);
+      setError('Failed to load customer data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -432,7 +467,14 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     e.stopPropagation();
     setLoadingState('statement', new Set([...loadingStates.statement, customer.accountNumber]));
     try {
-      await generateStatement(customer);
+      // Create a CustomerInput object with the required properties
+      const currentDate = new Date();
+      const customerInput = {
+        accountNumber: customer.accountNumber,
+        month: currentDate.getMonth() + 1 + '', // Convert to string (1-12)
+        year: currentDate.getFullYear() + '' // Convert to string
+      };
+      await generateStatement(customerInput);
       toast.success('Statement downloaded successfully');
     } catch (error) {
       console.error('Error downloading statement:', error);
@@ -476,11 +518,11 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         <div className="p-4 truncate hidden md:block">{customer.idNumber || 'N/A'}</div>
         <div className="p-4 truncate">
           <span className={`font-medium ${
-            customer.outstandingBalance > 0
+            (customer.outstandingTotalBalance || customer.outstandingBalance || 0) > 0
               ? isDarkMode ? 'text-red-400' : 'text-red-600'
               : isDarkMode ? 'text-green-400' : 'text-green-600'
           }`}>
-            R {customer.outstandingBalance?.toFixed(2)}
+            R {(customer.outstandingTotalBalance || customer.outstandingBalance || 0).toFixed(2)}
           </span>
         </div>
         <div className="p-4">
