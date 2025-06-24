@@ -670,7 +670,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
           
           // Convert image to base64 if it's not already
-          const imgData = typeof logo.src === 'string' ? logo.src : logo.src.toString('base64');
+          const imgData = typeof logo.src === 'string' ? logo.src : (logo.src as Buffer).toString('base64');
           
           // Add the logo image with error handling
           doc.addImage(
@@ -712,16 +712,17 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const yeboPayLogoX = (pageWidth - yeboPayLogoWidth) / 2;
       const yeboPayLogoY = currentY;
 
-      // Create a payment URL that includes customer details
-      const paymentUrl = `${window.location.origin}/payment/confirm?account_no=${encodeURIComponent(customerData.accountNumber)}&name=${encodeURIComponent(customerData.accountHolderName)}&amount=${encodeURIComponent(customerData.outstandingTotalBalance)}`;
-
+      // Create a special URL that will be intercepted by our application
+      // This URL will work in the downloaded PDF and can be handled when clicked
+      const paymentUrl = `${window.location.origin}/yebopay-payment/${encodeURIComponent(customerData.accountNumber)}/${encodeURIComponent(customerData.accountHolderName)}/${encodeURIComponent(customerData.outstandingTotalBalance)}`;
+      
       // Add clickable link to the logo
       doc.link(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, { url: paymentUrl });
 
       // Add YeboPay logo with error handling
       try {
         // Convert image to base64 if it's not already
-        const imgData = typeof yebopayLogo === 'string' ? yebopayLogo : yebopayLogo.toString('base64');
+        const imgData = typeof yebopayLogo === 'string' ? yebopayLogo : (yebopayLogo as any).toString('base64');
         
         // Add the YeboPay logo image with simplified parameters
         doc.addImage(

@@ -324,6 +324,15 @@ function App() {
                   />
                 }
               />
+              
+              <Route
+                path="/yebopay-payment/:accountNumber/:customerName/:amount"
+                element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <PaymentConfirmation />
+                  </Suspense>
+                }
+              />
             </Routes>
           )}
         </Suspense>

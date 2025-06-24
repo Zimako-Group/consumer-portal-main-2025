@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import yebopayLogo from '../assets/bank-logos/yebopay-logo.png';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
@@ -8,9 +8,12 @@ import CardPaymentForm from './CardPaymentForm';
 
 const PaymentConfirmation: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const accountNo = searchParams.get('account_no');
-  const customerName = searchParams.get('name');
-  const amount = searchParams.get('amount');
+  const params = useParams();
+
+  // Get parameters from either URL params or search params
+  const accountNo = params.accountNumber || searchParams.get('account_no');
+  const customerName = params.customerName || searchParams.get('name');
+  const amount = params.amount || searchParams.get('amount');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -174,6 +177,7 @@ const PaymentConfirmation: React.FC = () => {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
+        onNewUserSignup={() => {}}
         initialView="login"
       />
 
