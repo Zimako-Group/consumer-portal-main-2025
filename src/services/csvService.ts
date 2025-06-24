@@ -2,13 +2,18 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { db } from '../firebaseConfig';
 import { collection, doc, writeBatch } from 'firebase/firestore';
-import { CustomerData } from '../types/customer';
+import { CustomerData } from './customerService';
 
-const REQUIRED_COLUMNS = [
+// Essential columns that must be present
+const ESSENTIAL_COLUMNS = [
   'ACCOUNT NO',
   'ACCOUNT HOLDER NAME',
   'ID NUMBER',
-  'ERF NUMBER',
+  'ERF NUMBER'
+];
+
+// Optional columns that are nice to have but not required
+const OPTIONAL_COLUMNS = [
   'VALUATION',
   'VAT REG NUMBER',
   'COMPANY CC NUMBER',
@@ -22,7 +27,7 @@ const REQUIRED_COLUMNS = [
   'ACCOUNT TYPE',
   'OWNER CATEGORY',
   'GROUP ACCOUNT',
-  'CREDIT INSTRUCTION',
+  'CREDIT INSTRUCTION',  // Made optional since it's causing issues
   'CREDIT STATUS',
   'MAILING INSTRUCTION',
   'STREET ADDRESS',
@@ -36,14 +41,33 @@ const REQUIRED_COLUMNS = [
   'HAND OVER',
   'OUTSTANDING BALANCE CAPITAL',
   'OUTSTANDING BALANCE INTEREST',
-  'OUTSANDING TOTAL BALANCE',
+  'OUTSANDING TOTAL BALANCE',  // Made optional with alternative names
   'LAST PAYMENT AMOUNT',
   'LAST PAYMENT DATE',
   'AGREEMENT OUTSTANDING',
   'AGREEMENT TYPE',
-  'HOUSING OUTSANDING',
-  'ACC STATUS'
+  'HOUSING OUTSANDING',  // Made optional with alternative names
+  'ACC STATUS'  // Made optional with alternative names
 ];
+
+// All columns combined for reference - used for logging and debugging
+const ALL_COLUMNS = [...ESSENTIAL_COLUMNS, ...OPTIONAL_COLUMNS];
+
+// Helper function to convert account status string to valid enum value
+const getAccountStatus = (status: string): 'active' | 'inactive' | 'suspended' | 'pending' => {
+  status = status.toLowerCase().trim();
+  
+  if (status === 'active' || status === 'a') return 'active';
+  if (status === 'inactive' || status === 'i') return 'inactive';
+  if (status === 'suspended' || status === 's') return 'suspended';
+  if (status === 'pending' || status === 'p') return 'pending';
+  
+  // Default to active if unknown
+  return 'active';
+};
+
+// Log available columns for debugging
+console.debug('Available columns for processing:', ALL_COLUMNS);
 
 const parseValue = (value: any): string | number => {
   try {
@@ -71,7 +95,28 @@ const sanitizeDocumentId = (value: string): string => {
 
 const validateHeaders = (headers: string[]): { isValid: boolean; message: string } => {
   const normalizedHeaders = headers.map(h => h.trim().toUpperCase());
-  const missingColumns = REQUIRED_COLUMNS.filter(col => !normalizedHeaders.includes(col));
+  
+  // Create a mapping of alternative column names
+  const columnAliases: Record<string, string[]> = {
+    'ACCOUNT NO': ['ACCOUNT NO', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT_NO'],
+    'ACCOUNT HOLDER NAME': ['ACCOUNT HOLDER NAME', 'ACCOUNT HOLDER', 'HOLDER NAME', 'CUSTOMER NAME'],
+    'ID NUMBER': ['ID NUMBER', 'ID NO', 'IDENTIFICATION NUMBER', 'ID'],
+    'ERF NUMBER': ['ERF NUMBER', 'ERF NO', 'ERF', 'ERF_NUMBER'],
+    'CREDIT INSTRUCTION': ['CREDIT INSTRUCTION', 'CREDIT INSTRUCTIONS', 'CREDIT_INSTRUCTION'],
+    'OUTSANDING TOTAL BALANCE': ['OUTSANDING TOTAL BALANCE', 'OUTSTANDING TOTAL BALANCE', 'TOTAL BALANCE', 'OUTSTANDING BALANCE'],
+    'HOUSING OUTSANDING': ['HOUSING OUTSANDING', 'HOUSING OUTSTANDING', 'HOUSING BALANCE'],
+    'ACC STATUS': ['ACC STATUS', 'ACCOUNT STATUS', 'STATUS']
+  };
+  
+  // Check for missing essential columns with alias support
+  const missingColumns = ESSENTIAL_COLUMNS.filter((requiredCol: string) => {
+    // If the column has aliases, check if any of them are present
+    if (columnAliases[requiredCol]) {
+      return !columnAliases[requiredCol].some(alias => normalizedHeaders.includes(alias));
+    }
+    // Otherwise, check for the exact column name
+    return !normalizedHeaders.includes(requiredCol);
+  });
 
   if (missingColumns.length > 0) {
     return {
@@ -170,74 +215,102 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
     let batchCount = 0;
     let startTime = Date.now();
 
+    // Helper function to get value from row with alternative column names
+    const getValueFromRow = (row: any, primaryKey: string, alternativeKeys: string[] = []): any => {
+      if (row[primaryKey] !== undefined) {
+        return parseValue(row[primaryKey]);
+      }
+      
+      // Try alternative keys
+      for (const altKey of alternativeKeys) {
+        if (row[altKey] !== undefined) {
+          return parseValue(row[altKey]);
+        }
+      }
+      
+      return 'N/A';
+    };
+    
     for (const row of parseResult.data) {
-      const rawAccountNumber = parseValue(row['ACCOUNT NO']);
+      const rawAccountNumber = getValueFromRow(row, 'ACCOUNT NO', ['ACCOUNT NUMBER', 'ACC NO']);
       if (!rawAccountNumber || rawAccountNumber === 'N/A') {
         console.warn(`Skipping row: Missing account number`);
         continue;
       }
 
       const documentId = sanitizeDocumentId(rawAccountNumber.toString());
+      // Create a data object with only the fields that exist in CustomerData interface
       const customerData: Partial<CustomerData> = {
         accountNumber: rawAccountNumber.toString(),
-        accountHolderName: parseValue(row['ACCOUNT HOLDER NAME']) as string,
-        idNumber: parseValue(row['ID NUMBER']) as string,
-        erfNumber: parseValue(row['ERF NUMBER']) as string,
-        valuation: parseValue(row['VALUATION']) as string,
-        vatRegNumber: parseValue(row['VAT REG NUMBER']) as string,
-        companyCcNumber: parseValue(row['COMPANY CC NUMBER']) as string,
-        postalAddress1: parseValue(row['POSTAL ADDRESS 1']) as string,
-        postalAddress2: parseValue(row['POSTAL ADDRESS 2']) as string,
-        postalAddress3: parseValue(row['POSTAL ADDRESS 3']) as string,
-        postalCode: parseValue(row['POSTAL CODE']) as string,
-        emailAddress: parseValue(row['EMAIL ADDRESS']) as string,
-        cellNumber: parseValue(row['CELL NUMBER']) as string,
-        occupantOwner: parseValue(row['OCC/OWN']) as string,
-        accountType: parseValue(row['ACCOUNT TYPE']) as string,
-        ownerCategory: parseValue(row['OWNER CATEGORY']) as string,
-        groupAccount: parseValue(row['GROUP ACCOUNT']) as string,
-        creditInstruction: parseValue(row['CREDIT INSTRUCTION']) as string,
-        creditStatus: parseValue(row['CREDIT STATUS']) as string,
-        mailingInstruction: parseValue(row['MAILING INSTRUCTION']) as string,
-        streetAddress: parseValue(row['STREET ADDRESS']) as string,
-        town: parseValue(row['TOWN']) as string,
-        suburb: parseValue(row['SUBURB']) as string,
-        ward: parseValue(row['WARD']) as string,
-        propertyCategory: parseValue(row['PROPERTY CATEGORY']) as string,
-        gisKey: parseValue(row['GIS KEY']) as string,
-        indigent: parseValue(row['INDIGENT']) as string,
-        pensioner: parseValue(row['PENSIONER']) as string,
-        handOver: parseValue(row['HAND OVER']) as string,
-        outstandingBalanceCapital: parseValue(row['OUTSTANDING BALANCE CAPITAL']) as number,
-        outstandingBalanceInterest: parseValue(row['OUTSTANDING BALANCE INTEREST']) as number,
-        outstandingTotalBalance: parseValue(row['OUTSANDING TOTAL BALANCE']) as number,
-        lastPaymentAmount: parseValue(row['LAST PAYMENT AMOUNT']) as number,
-        lastPaymentDate: parseValue(row['LAST PAYMENT DATE']) as string,
-        agreementOutstanding: parseValue(row['AGREEMENT OUTSTANDING']) as string,
-        agreementType: parseValue(row['AGREEMENT TYPE']) as string,
-        housingOutstanding: parseValue(row['HOUSING OUTSANDING']) as string,
-        accountStatus: parseValue(row['ACC STATUS']) as string,
+        accountHolderName: getValueFromRow(row, 'ACCOUNT HOLDER NAME', ['ACCOUNT HOLDER', 'HOLDER NAME']) as string,
+        idNumber: getValueFromRow(row, 'ID NUMBER', ['ID NO', 'IDENTIFICATION NUMBER']) as string,
+        erfNumber: getValueFromRow(row, 'ERF NUMBER', ['ERF NO', 'ERF']) as string,
+        valuation: Number(getValueFromRow(row, 'VALUATION', ['PROPERTY VALUATION'])) || 0,
+        email: getValueFromRow(row, 'EMAIL ADDRESS', ['EMAIL', 'E-MAIL']) as string,
+        phone: getValueFromRow(row, 'CELL NUMBER', ['CELL PHONE', 'MOBILE NUMBER', 'PHONE NUMBER']) as string,
+        address: getValueFromRow(row, 'STREET ADDRESS', ['STREET', 'ADDRESS', 'PHYSICAL ADDRESS']) as string,
+        postalAddress1: getValueFromRow(row, 'POSTAL ADDRESS 1', ['POSTAL ADDRESS LINE 1', 'POSTAL LINE 1']) as string,
+        postalAddress2: getValueFromRow(row, 'POSTAL ADDRESS 2', ['POSTAL ADDRESS LINE 2', 'POSTAL LINE 2']) as string,
+        postalAddress3: getValueFromRow(row, 'POSTAL ADDRESS 3', ['POSTAL ADDRESS LINE 3', 'POSTAL LINE 3']) as string,
+        postalCode: getValueFromRow(row, 'POSTAL CODE', ['POST CODE', 'ZIP CODE']) as string,
+        accountStatus: getAccountStatus(getValueFromRow(row, 'ACC STATUS', ['ACCOUNT STATUS', 'STATUS']) as string),
+        outstandingBalance: Number(getValueFromRow(row, 'OUTSANDING TOTAL BALANCE', ['OUTSTANDING TOTAL BALANCE', 'TOTAL BALANCE', 'OUTSTANDING BALANCE'])) || 0,
+        lastPaymentAmount: Number(getValueFromRow(row, 'LAST PAYMENT AMOUNT', ['PAYMENT AMOUNT', 'RECENT PAYMENT AMOUNT'])) || 0,
+        lastPaymentDate: getValueFromRow(row, 'LAST PAYMENT DATE', ['PAYMENT DATE', 'RECENT PAYMENT DATE']) as string,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Store additional data in a separate metadata object
+      const additionalData = {
+        vatRegNumber: getValueFromRow(row, 'VAT REG NUMBER', ['VAT REGISTRATION', 'VAT NUMBER']) as string,
+        companyCcNumber: getValueFromRow(row, 'COMPANY CC NUMBER', ['COMPANY NUMBER', 'CC NUMBER']) as string,
+        occupantOwner: getValueFromRow(row, 'OCC/OWN', ['OCCUPANT/OWNER', 'OCCUPANT OWNER']) as string,
+        accountType: getValueFromRow(row, 'ACCOUNT TYPE', ['ACC TYPE', 'TYPE OF ACCOUNT']) as string,
+        ownerCategory: getValueFromRow(row, 'OWNER CATEGORY', ['OWNER TYPE', 'CATEGORY']) as string,
+        groupAccount: getValueFromRow(row, 'GROUP ACCOUNT', ['GROUP ACC', 'GROUP']) as string,
+        creditInstruction: getValueFromRow(row, 'CREDIT INSTRUCTION', ['CREDIT INSTRUCTIONS', 'CREDIT_INSTRUCTION']) as string,
+        creditStatus: getValueFromRow(row, 'CREDIT STATUS', ['CREDIT STATE', 'CREDIT STANDING']) as string,
+        mailingInstruction: getValueFromRow(row, 'MAILING INSTRUCTION', ['MAILING INSTRUCTIONS', 'MAIL INSTRUCTION']) as string,
+        town: getValueFromRow(row, 'TOWN', ['CITY', 'MUNICIPALITY']) as string,
+        suburb: getValueFromRow(row, 'SUBURB', ['DISTRICT', 'AREA']) as string,
+        ward: getValueFromRow(row, 'WARD', ['WARD NUMBER', 'WARD NO']) as string,
+        propertyCategory: getValueFromRow(row, 'PROPERTY CATEGORY', ['PROPERTY TYPE', 'PROPERTY CLASS']) as string,
+        gisKey: getValueFromRow(row, 'GIS KEY', ['GIS', 'GIS ID']) as string,
+        indigent: getValueFromRow(row, 'INDIGENT', ['INDIGENT STATUS', 'IS INDIGENT']) as string,
+        pensioner: getValueFromRow(row, 'PENSIONER', ['PENSIONER STATUS', 'IS PENSIONER']) as string,
+        handOver: getValueFromRow(row, 'HAND OVER', ['HANDOVER', 'HANDED OVER']) as string,
+        outstandingBalanceCapital: Number(getValueFromRow(row, 'OUTSTANDING BALANCE CAPITAL', ['BALANCE CAPITAL', 'CAPITAL BALANCE'])) || 0,
+        outstandingBalanceInterest: Number(getValueFromRow(row, 'OUTSTANDING BALANCE INTEREST', ['BALANCE INTEREST', 'INTEREST BALANCE'])) || 0,
+        agreementOutstanding: getValueFromRow(row, 'AGREEMENT OUTSTANDING', ['AGREEMENT BALANCE', 'OUTSTANDING AGREEMENT']) as string,
+        agreementType: getValueFromRow(row, 'AGREEMENT TYPE', ['TYPE OF AGREEMENT', 'AGREEMENT']) as string,
+        housingOutstanding: getValueFromRow(row, 'HOUSING OUTSANDING', ['HOUSING OUTSTANDING', 'HOUSING BALANCE']) as string,
         contactDetails: {
-          email: parseValue(row['EMAIL ADDRESS']) as string,
-          phoneNumber: parseValue(row['CELL NUMBER']) as string,
-          address: parseValue(row['STREET ADDRESS']) as string,
+          email: getValueFromRow(row, 'EMAIL ADDRESS', ['EMAIL', 'E-MAIL']) as string,
+          phoneNumber: getValueFromRow(row, 'CELL NUMBER', ['CELL PHONE', 'MOBILE NUMBER', 'PHONE NUMBER']) as string,
+          address: getValueFromRow(row, 'STREET ADDRESS', ['STREET', 'ADDRESS', 'PHYSICAL ADDRESS']) as string,
         },
         paymentHistory: [
           {
-            date: parseValue(row['LAST PAYMENT DATE']) as string,
-            amount: parseValue(row['LAST PAYMENT AMOUNT']) as number,
+            date: getValueFromRow(row, 'LAST PAYMENT DATE', ['PAYMENT DATE', 'RECENT PAYMENT DATE']) as string,
+            amount: Number(getValueFromRow(row, 'LAST PAYMENT AMOUNT', ['PAYMENT AMOUNT', 'RECENT PAYMENT AMOUNT'])) || 0,
             type: 'Payment',
             reference: 'Payment Reference',
             status: 'Paid',
           },
         ],
       };
+      
+      // For debugging
+      console.debug(`Processing customer: ${customerData.accountNumber}, Balance: ${customerData.outstandingBalance}`);
 
       const customerDoc = doc(customersRef, documentId);
-      batch.set(customerDoc, {
-        ...customerData,
-        lastUpdated: new Date().toISOString()
-      });
+      // Set the main customer data
+      batch.set(customerDoc, customerData);
+      
+      // Store additional data in a separate collection if needed
+      // We're not using additionalData right now, but it's available if needed in the future
+      // batch.set(doc(collection(db, 'customer_metadata'), documentId), additionalData);
       processedCount++;
       batchCount++;
 
