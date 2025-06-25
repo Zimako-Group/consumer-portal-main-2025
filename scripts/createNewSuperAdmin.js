@@ -2,16 +2,19 @@ const { initializeApp } = require('firebase/app');
 const { getAuth, createUserWithEmailAndPassword } = require('firebase/auth');
 const { getFirestore, doc, setDoc } = require('firebase/firestore');
 
-// Your Firebase configuration
+// Load environment variables from .env file
+require('dotenv').config();
+
+// Your Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCwb5v9FrGaEaRG86pHjxtPLwrKn1llB3s",
-  authDomain: "zimako-backend.firebaseapp.com",
-  projectId: "zimako-backend",
-  storageBucket: "zimako-backend.firebasestorage.app",
-  messagingSenderId: "833787391563",
-  appId: "1:833787391563:web:ff4cb0f78d73ba15c667ce",
-  measurementId: "G-YB7X3FBZE8",
-  databaseURL: "https://zimako-backend-default-rtdb.firebaseio.com"
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID,
+  databaseURL: process.env.FIREBASE_DATABASE_URL
 };
 
 // Initialize Firebase
@@ -19,12 +22,18 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Super admin details - replace these values
+// Super admin details from environment variables
 const newSuperAdmin = {
-  email: "diphapang@mohokare.gov.za",
-  password: "0768284069!Dr",
-  fullName: "Diphapang Rannetla"
+  email: process.env.SUPER_ADMIN_EMAIL,
+  password: process.env.SUPER_ADMIN_PASSWORD,
+  fullName: process.env.SUPER_ADMIN_FULL_NAME
 };
+
+// Validate that required environment variables are set
+if (!process.env.SUPER_ADMIN_EMAIL || !process.env.SUPER_ADMIN_PASSWORD || !process.env.SUPER_ADMIN_FULL_NAME) {
+  console.error('Error: Required environment variables are missing. Please set SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, and SUPER_ADMIN_FULL_NAME.');
+  process.exit(1);
+}
 
 // Password validation
 function validatePassword(password) {
