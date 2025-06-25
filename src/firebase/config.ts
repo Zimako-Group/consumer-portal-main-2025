@@ -1,19 +1,14 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import type { FirebaseApp } from 'firebase/app';
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
+// Import the existing Firebase app instance from the main config file
+import { app as firebaseApp } from '../firebaseConfig';
 
-// Initialize Firebase only if it hasn't been initialized yet
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// Use the imported app with proper typing
+const app: FirebaseApp | null = firebaseApp;
 
-// Initialize Firestore
-export const db = getFirestore(app);
+// Initialize Firestore using the existing app instance
+export const db: Firestore | null = app ? getFirestore(app) : null;
 
+// Export the existing app instance
 export default app;
