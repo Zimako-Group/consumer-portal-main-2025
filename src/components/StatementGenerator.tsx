@@ -34,6 +34,7 @@ interface CustomerData {
   address: string;
   erfNumber: string;
   vatRegNumber: string;
+  outstandingBalance: number;
   outstandingTotalBalance: number;
   aging120Days: number;
   aging90Days: number;
@@ -138,6 +139,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         address: data.streetAddress || '',
         erfNumber: data.erfNumber || '',
         vatRegNumber: data.vatRegNumber || '',
+        outstandingBalance: data.outstandingBalance || 0,
         outstandingTotalBalance: data.outstandingTotalBalance || 0,
         aging120Days: data.aging120Days || 0,
         aging90Days: data.aging90Days || 0,
@@ -211,7 +213,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const customerDoc = await getDoc(doc(db, 'customers', customerNumber));
       if (customerDoc.exists()) {
         const data = customerDoc.data();
-        return data.outstandingTotalBalance || '0';
+        return data.outstandingBalance || data.outstandingTotalBalance || '0';
       }
       return '0';
     } catch (error) {
@@ -481,7 +483,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
            { content: 'OPENING BALANCE', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
-           { content: `R ${customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`, styles: { cellPadding: 0.3, halign: 'left' } }],
+           { content: `R ${customerData.outstandingBalance?.toFixed(2) || customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`, styles: { cellPadding: 0.3, halign: 'left' } }],
           ...(await getDetailedLeviedForCustomer(accountNumber)).map(item => [
             { content: '2024-10-31', styles: { cellPadding: 0.3 } },
             { content: item.code || '', styles: { cellPadding: 0.3 } },
