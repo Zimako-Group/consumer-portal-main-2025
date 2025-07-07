@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import toast from 'react-hot-toast';
 import Papa from 'papaparse';
@@ -9,95 +9,21 @@ import { getLastUploadTimestamp, updateUploadTimestamp } from '../services/uploa
 
 interface DetailedAgedAnalysis {
     ACCOUNT_NO: string;
-    TARIFF_CODE: string;
-    TARIFF_DESC: string;
-    SERVICE_CODE: string;
-    SERVICE_DESC: string;
-    INTEREST_YN: string;
-    REF_TARIFF_CODE: string;
-    REF_TARIFF_DESC: string;
-    SCOA_CONTROL_CODE: string;
-    SCOA_CONTROL_DESC: string;
-    SCOA_ITEM_CODE: string;
-    '202409_Current': string;
-    '202408_30Days': string;
-    '202407_60Days': string;
-    '202406_90Days': string;
-    '202405_120 Days': string;
-    '202404_150Days': string;
-    '202403_180Days': string;
-    '202402_210Days': string;
-    '202401_240Days': string;
-    '202312_270Days': string;
-    '202311_300Days': string;
-    '202310_330Days': string;
-    '202309_360Days': string;
-    '202308_390+Days': string;
+    Current: string;
+    '30 Days': string;
+    '60 Days': string;
+    '90 Days': string;
+    '120 Days': string;
+    '150 Days': string;
+    '180 Days': string;
+    '210 Days': string;
+    '240 Days': string;
+    '270 Days': string;
+    '300 Days': string;
+    '330 Days': string;
+    '360 Days': string;
+    '390 + Days': string;
     TOTAL: string;
-    WRITTEN_OFF: string;
-    ACCOUNT_HOLDER: string;
-    ERF_EXTENTION: string;
-    ERF_LOT_NUMBER: string;
-    ERF_SUB_DIVISION: string;
-    ERF_UNIT_NUMBER: string;
-    STREET_ADDRESS: string;
-    POST_ADR_1: string;
-    POST_ADR_2: string;
-    POST_ADR_3: string;
-    POST_CODE: string;
-    CELL_NUMBER: string;
-    ID_NUMBER_1: string;
-    ID_NUMBER_2: string;
-    ACCOUNT_EMAIL: string;
-    ACCOUNT_STATUS: string;
-    ACCOUNT_TYPE: string;
-    SUB_ACCOUNT_TYPE: string;
-    OWNER_TYPE: string;
-    CATEGORY: string;
-    CREDIT_STATUS: string;
-    CREDIT_INSTRUCTION: string;
-    GROUP_ACCOUNT: string;
-    MAILING_INSTRUCTION: string;
-    OLD_ACCOUNT_NUMBER: string;
-    NOTES_2: string;
-    PROVINCE: string;
-    TOWN: string;
-    SUBURB: string;
-    WARD: string;
-    PROPERTY_CATEGORY: string;
-    GIS_KEY: string;
-    ERF_REF: string;
-    DEPOSIT: string;
-    INDIGENT_YN: string;
-    INDIGENT_APPLICATION: string;
-    INDIGENT_EXPIRY: string;
-    INDIGENT_SEQ: string;
-    PENSIONER_YN: string;
-    EXTENSION_YN: string;
-    LAST_PAYMENT_DATE: string;
-    LAST_PAYMENT_AMT: string;
-    AGREEMENT_BALANCE: string;
-    NO_OF_HND_OVERS: string;
-    HND_OVR_YN: string;
-    METERS: string;
-    'NT GROUP CODE': string;
-    'NT GROUP DESC': string;
-    STATUS_RISK_SCORE: string;
-    OWNERSHIP_TYPE_RISK_SCORE: string;
-    ACC_TYPE_RISK_SCORE: string;
-    TOTAL_TYPE_RISK: string;
-    IMPAIR_YN: string;
-    IMPAIR_TOTAL: string;
-    'UP TO 30 DAY FACTOR': string;
-    '60 DAY FACTOR': string;
-    '90 DAY FACTOR': string;
-    '120 DAY FACTOR': string;
-    '150 DAY FACTOR': string;
-    '180 DAY FACTOR': string;
-    TOTAL_PAYMENT_RISK: string;
-    PROVISION_FACTOR: string;
-    BAD_DEBT_PROVISION: string;
-    FACTOR: string;
 }
 
 export default function DetailedAgedAnalysisUpload() {
@@ -162,6 +88,15 @@ export default function DetailedAgedAnalysisUpload() {
                 throw new Error('No data found in file');
             }
 
+            // Validate that the file has the required fields
+            const requiredFields = ['ACCOUNT_NO', 'Current', '30 Days', '60 Days', '90 Days', '120 Days'];
+            const sampleRecord = data[0];
+            const missingFields = requiredFields.filter(field => !(field in sampleRecord));
+
+            if (missingFields.length > 0) {
+                throw new Error(`File is missing required fields: ${missingFields.join(', ')}`);
+            }
+
             console.log('Sample record:', data[0]); // Debug log
             await processUpload(data);
             await updateUploadTimestamp('detailedAged');
@@ -182,7 +117,7 @@ export default function DetailedAgedAnalysisUpload() {
             console.log(`Starting to process ${data.length} records...`);
             const BATCH_SIZE = 500;
             let processedRecords = 0;
-            let currentBatch: DetailedAgedAnalysis[] = [];
+
             let totalGroups = 0;
 
             // First pass: group all data and count total unique customers
@@ -230,20 +165,20 @@ export default function DetailedAgedAnalysisUpload() {
                 };
 
                 // Sum up the aging amounts
-                acc[record.ACCOUNT_NO].totals.current += processAmount(record['202409_Current']);
-                acc[record.ACCOUNT_NO].totals.days30 += processAmount(record['202408_30Days']);
-                acc[record.ACCOUNT_NO].totals.days60 += processAmount(record['202407_60Days']);
-                acc[record.ACCOUNT_NO].totals.days90 += processAmount(record['202406_90Days']);
-                acc[record.ACCOUNT_NO].totals.days120 += processAmount(record['202405_120 Days']);
-                acc[record.ACCOUNT_NO].totals.days150 += processAmount(record['202404_150Days']);
-                acc[record.ACCOUNT_NO].totals.days180 += processAmount(record['202403_180Days']);
-                acc[record.ACCOUNT_NO].totals.days210 += processAmount(record['202402_210Days']);
-                acc[record.ACCOUNT_NO].totals.days240 += processAmount(record['202401_240Days']);
-                acc[record.ACCOUNT_NO].totals.days270 += processAmount(record['202312_270Days']);
-                acc[record.ACCOUNT_NO].totals.days300 += processAmount(record['202311_300Days']);
-                acc[record.ACCOUNT_NO].totals.days330 += processAmount(record['202310_330Days']);
-                acc[record.ACCOUNT_NO].totals.days360 += processAmount(record['202309_360Days']);
-                acc[record.ACCOUNT_NO].totals.days390Plus += processAmount(record['202308_390+Days']);
+                acc[record.ACCOUNT_NO].totals.current += processAmount(record['Current']);
+                acc[record.ACCOUNT_NO].totals.days30 += processAmount(record['30 Days']);
+                acc[record.ACCOUNT_NO].totals.days60 += processAmount(record['60 Days']);
+                acc[record.ACCOUNT_NO].totals.days90 += processAmount(record['90 Days']);
+                acc[record.ACCOUNT_NO].totals.days120 += processAmount(record['120 Days']);
+                acc[record.ACCOUNT_NO].totals.days150 += processAmount(record['150 Days']);
+                acc[record.ACCOUNT_NO].totals.days180 += processAmount(record['180 Days']);
+                acc[record.ACCOUNT_NO].totals.days210 += processAmount(record['210 Days']);
+                acc[record.ACCOUNT_NO].totals.days240 += processAmount(record['240 Days']);
+                acc[record.ACCOUNT_NO].totals.days270 += processAmount(record['270 Days']);
+                acc[record.ACCOUNT_NO].totals.days300 += processAmount(record['300 Days']);
+                acc[record.ACCOUNT_NO].totals.days330 += processAmount(record['330 Days']);
+                acc[record.ACCOUNT_NO].totals.days360 += processAmount(record['360 Days']);
+                acc[record.ACCOUNT_NO].totals.days390Plus += processAmount(record['390 + Days']);
 
                 return acc;
             }, {} as Record<string, { details: DetailedAgedAnalysis[], totals: Record<string, number> }>);
@@ -257,12 +192,18 @@ export default function DetailedAgedAnalysisUpload() {
             const totalBatches = Math.ceil(totalGroups / BATCH_SIZE);
 
             for (let i = 0; i < groupedDataArray.length; i += BATCH_SIZE) {
+                if (!db) {
+                    throw new Error('Firebase Firestore is not initialized');
+                }
                 const batch = writeBatch(db);
                 const batchItems = groupedDataArray.slice(i, i + BATCH_SIZE);
 
                 console.log(`Processing batch ${currentBatchNumber}/${totalBatches} (${batchItems.length} customers)`);
 
                 for (const [accountNo, data] of batchItems) {
+                    if (!db) {
+                        throw new Error('Firebase Firestore is not initialized');
+                    }
                     const docRef = doc(db, 'detailed_aged_analysis', accountNo);
                     batch.set(docRef, {
                         accountNo,

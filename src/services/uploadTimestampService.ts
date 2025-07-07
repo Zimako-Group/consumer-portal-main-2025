@@ -1,10 +1,13 @@
 import { db } from '../firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-export type UploadType = 'meterReadings' | 'csmBalance';
+export type UploadType = 'meterReadings' | 'csmBalance' | 'detailedAged';
 
 export const updateUploadTimestamp = async (type: UploadType): Promise<void> => {
     try {
+        if (!db) {
+            throw new Error('Firebase Firestore is not initialized');
+        }
         await setDoc(doc(db, 'uploadTimestamps', type), {
             lastUpload: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -17,6 +20,10 @@ export const updateUploadTimestamp = async (type: UploadType): Promise<void> => 
 
 export const getLastUploadTimestamp = async (type: UploadType): Promise<string | null> => {
     try {
+        if (!db) {
+            console.error('Firebase Firestore is not initialized');
+            return null;
+        }
         const docRef = doc(db, 'uploadTimestamps', type);
         const docSnap = await getDoc(docRef);
         
