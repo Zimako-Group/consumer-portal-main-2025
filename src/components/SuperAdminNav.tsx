@@ -2,20 +2,15 @@ import React, { useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { 
   Home, 
-  Layout, 
-  Mail, 
   HelpCircle, 
   Bell, 
   Sun, 
   Moon,
   LogOut,
-  Menu as MenuIcon,
-  X,
   ChevronDown,
   Palette,
   FileText,
   Plus,
-  Image,
   History,
   Users,
   FileSpreadsheet,
@@ -23,15 +18,16 @@ import {
   HelpCircleIcon,
   Activity,
   UserPlus,
-  Settings
+  Settings,
+  Send
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
-  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard') => void;
-  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard';
+  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard') => void;
+  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard';
 }
 
 interface NavItem {
@@ -42,7 +38,7 @@ interface NavItem {
   action?: () => void;
 }
 
-const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, currentView }) => {
+const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange }) => {
   const { isDarkMode, toggleTheme, themeColor, setThemeColor } = useTheme();
   const { currentUser, userData } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -103,6 +99,12 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange, c
       icon: <MessageSquare className="w-5 h-5" />, 
       href: '#',
       action: () => onViewChange('whatsapp-dashboard')
+    },
+    { 
+      name: 'Bulk SMS Dashboard', 
+      icon: <Send className="w-5 h-5" />, 
+      href: '#',
+      action: () => onViewChange('bulk-sms-dashboard')
     },
     {
       name: 'Users',

@@ -3,7 +3,7 @@ import { db } from '../firebaseConfig';
 import { format } from 'date-fns';
 
 // Helper function to format phone number
-const formatPhoneNumber = (phoneNumber: string | number | null | undefined) => {
+export const formatPhoneNumber = (phoneNumber: string | number | null | undefined) => {
   if (!phoneNumber) return '';
   
   // Convert to string if it's a number
@@ -35,6 +35,11 @@ export interface CommunicationRecord {
 // Helper function to update communication stats
 export const updateCommunicationStats = async (type: 'sms' | 'email' | 'whatsapp') => {
   try {
+    if (!db) {
+      console.error('Firestore database is not initialized');
+      return;
+    }
+    
     const currentMonth = format(new Date(), 'yyyy-MM');
     const statsRef = doc(db, 'communicationStats', currentMonth);
     
@@ -65,6 +70,11 @@ export const updateCommunicationStats = async (type: 'sms' | 'email' | 'whatsapp
 
 export const recordCommunication = async (data: CommunicationRecord) => {
   try {
+    if (!db) {
+      console.error('Firestore database is not initialized');
+      throw new Error('Database not initialized');
+    }
+    
     const communicationsRef = collection(db, 'communications');
     const communicationData = {
       ...data,

@@ -1,32 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { DollarSign, FileText, Activity, MessageSquare, Users, CreditCard, Building2, MessageCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { DollarSign, FileText, Users, CreditCard, Building2, MessageCircle } from 'lucide-react';
 import SuperAdminNav from './SuperAdminNav';
 import ChangeLog from './ChangeLog';
-import CsmBalanceReportUpload from './CsmBalanceReportUpload';
 import CustomerDashboard from './CustomerDashboard';
-import MeterReadingsUpload from './MeterReadingsUpload';
-import DetailedAgedAnalysisUpload from './DetailedAgedAnalysisUpload';
 import QueryManagement from './QueryManagement';
 import CreateAdminUser from './CreateAdminUser';
 import ViewStatements from './ViewStatements';
 import SuperPaymentReminder from './SuperPaymentReminder';
-import DetailedLeviedUpload from './DetailedLeviedUpload';
 import StatsCard from './StatsCard';
 import FeatureCard from './FeatureCard';
 import ZimakoAIChatBot from './ZimakoAIChatBot';
 import ActiveUsersCard from './analytics/ActiveUsersCard';
 import AdminMeterReadings from './AdminMeterReadings';
 import WhatsAppDashboard from './WhatsAppDashboard';
+import BulkSMSDashboard from './BulkSMSDashboard';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import jellyfishBg from '../assets/jellyfish-bg.svg';
-import { collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import '../styles/dashboard.css';
-import ReportsLayout from './ReportsLayout';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import SessionManager from '../utils/sessionManager';
 import { trackUserActivity } from '../utils/activityTracker';
 import toast from 'react-hot-toast';
+import jellyfishBg from '../assets/jellyfish-bg.svg';
+import '../styles/dashboard.css';
+import ReportsLayout from './ReportsLayout';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -46,7 +43,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     console.log('User Data:', userData);
   }, [currentUser, userData]);
 
-  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
@@ -82,6 +79,11 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   // Function to fetch active users count
   const fetchActiveUsers = async () => {
     try {
+      if (!db) {
+        console.error('Firestore instance is null');
+        return;
+      }
+      
       // Create Firestore query for current active users
       const customersRef = collection(db, 'customers');
       const activeUsersQuery = query(
@@ -146,6 +148,11 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   // Function to fetch total revenue (outstanding balance)
   const fetchTotalRevenue = async () => {
     try {
+      if (!db) {
+        console.error('Firestore instance is null');
+        return;
+      }
+      
       const customersRef = collection(db, 'customers');
       const querySnapshot = await getDocs(customersRef);
       
@@ -210,6 +217,11 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   // Function to fetch total payments
   const fetchTotalPayments = async () => {
     try {
+      if (!db) {
+        console.error('Firestore instance is null');
+        return;
+      }
+      
       const customersRef = collection(db, 'customers');
       const querySnapshot = await getDocs(customersRef);
       
@@ -270,6 +282,11 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   // Function to fetch total meters consumption
   const fetchTotalMeters = async () => {
     try {
+      if (!db) {
+        console.error('Firestore instance is null');
+        return;
+      }
+      
       // Get reference to the meter readings collection for September 2024
       const meterReadingsRef = collection(db, 'meterReadings', '2024', '09');
       const querySnapshot = await getDocs(meterReadingsRef);
@@ -330,6 +347,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     }
   };
 
+
+
   // Initialize session timeout manager
   useEffect(() => {
     // Create session manager with 5 minute timeout
@@ -377,7 +396,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
   };
 
   // Modify the existing logout handler to stop session monitoring
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<boolean> => {
     try {
       console.log('Initiating logout from SuperAdminDashboard...');
       
@@ -389,8 +408,10 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
       // Call the onLogout prop function
       await onLogout();
       console.log('Logout successful');
+      return true; // Return true to indicate successful logout
     } catch (error) {
       console.error('Error during logout:', error);
+      return false; // Return false to indicate failed logout
     }
   };
 
@@ -416,7 +437,11 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
             ) : currentView === 'reports' ? (
               <ReportsLayout />
             ) : currentView === 'customerdashboard' ? (
-              <CustomerDashboard onLogout={handleLogout} />
+              <CustomerDashboard 
+                onLogout={handleLogout} 
+                userEmail={currentUser?.email || ''}
+                userName={userData?.fullName || ''}
+                accountNumber={userData?.accountNumber || ''} />
             ) : currentView === 'queries' ? (
               <div className="h-full">
                 <QueryManagement />
@@ -435,6 +460,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               </div>
             ) : currentView === 'whatsapp-dashboard' ? (
               <WhatsAppDashboard />
+            ) : currentView === 'bulk-sms-dashboard' ? (
+              <BulkSMSDashboard />
             ) : (
               // Dashboard View with new greeting and stats cards
               <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">
