@@ -520,12 +520,26 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const agedAnalysis = await this.fetchAgedAnalysis(customerData.accountNumber);
       const closingBalance = await this.fetchCustomerBalance(customerData.accountNumber);
 
+      // Calculate the total for 120+ days (sum of all aging periods from 120 days and above)
+      const days120Plus = agedAnalysis ? (
+        parseFloat(agedAnalysis.days120 || '0') +
+        parseFloat(agedAnalysis.days150 || '0') +
+        parseFloat(agedAnalysis.days180 || '0') +
+        parseFloat(agedAnalysis.days210 || '0') +
+        parseFloat(agedAnalysis.days240 || '0') +
+        parseFloat(agedAnalysis.days270 || '0') +
+        parseFloat(agedAnalysis.days300 || '0') +
+        parseFloat(agedAnalysis.days330 || '0') +
+        parseFloat(agedAnalysis.days360 || '0') +
+        parseFloat(agedAnalysis.days390Plus || '0')
+      ).toFixed(2) : '0.00';
+
       // Configure aging analysis table
       const agingTableOptions = {
         startY: currentY,
         head: [['120+ DAYS', '90 DAYS', '60 DAYS', '30 DAYS', 'CURRENT', 'CLOSING BALANCE']],
         body: [[
-          { content: `R ${agedAnalysis?.days120 || 0}`, styles: { cellPadding: 1 } },
+          { content: `R ${days120Plus}`, styles: { cellPadding: 1 } },
           { content: `R ${agedAnalysis?.days90 || 0}`, styles: { cellPadding: 1 } },
           { content: `R ${agedAnalysis?.days60 || 0}`, styles: { cellPadding: 1 } },
           { content: `R ${agedAnalysis?.days30 || 0}`, styles: { cellPadding: 1 } },
