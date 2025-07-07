@@ -117,6 +117,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('Fetching customer details for account:', accountNumber);
       
       // Get customer document from Firestore
+      if (!db) {
+        console.error('Firestore database is not initialized');
+        return null;
+      }
       const customerDoc = await getDoc(doc(db, 'customers', accountNumber));
       
       if (!customerDoc.exists()) {
@@ -164,6 +168,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
 
   fetchAgedAnalysis = async (customerNumber: string) => {
     try {
+      if (!db) {
+        console.error('Firestore database is not initialized');
+        return null;
+      }
       const docRef = doc(db, 'detailed_aged_analysis', customerNumber);
       const docSnap = await getDoc(docRef);
       
@@ -196,6 +204,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
 
   fetchCustomerBalance = async (customerNumber: string): Promise<string> => {
     try {
+      if (!db) {
+        console.error('Firebase database is not initialized');
+        return '0';
+      }
       const customerDoc = await getDoc(doc(db, 'customers', customerNumber));
       if (customerDoc.exists()) {
         const data = customerDoc.data();
@@ -358,8 +370,8 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       doc.text(customerData.postalCode?.toString() || '', margin.left + 23, currentY + 12);
 
       // Generate tax invoice number (YYYY/MM/AccountNumber)
-      const statementDate = '2024-09-31'; // Fixed date for all statements
-      const taxInvoiceNo = `2024/09/${customerData.accountNumber}`;
+      const statementDate = '2024-10-31'; // Fixed date for all statements
+      const taxInvoiceNo = `2024/10/${customerData.accountNumber}`;
 
       // Right column values (position maintained)
       const rightX = pageWidth / 2;
@@ -464,14 +476,14 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         startY: currentY,
         head: [['DATE', 'CODE', 'DESCRIPTION', 'UNITS', 'TARIFF', 'VALUE']],
         body: [
-          [{ content: '2024-09-31', styles: { cellPadding: 0.3 } }, 
+          [{ content: '2024-10-31', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: 'OPENING BALANCE', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: `R ${customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`, styles: { cellPadding: 0.3, halign: 'left' } }],
           ...(await getDetailedLeviedForCustomer(accountNumber)).map(item => [
-            { content: '2024-09-31', styles: { cellPadding: 0.3 } },
+            { content: '2024-10-31', styles: { cellPadding: 0.3 } },
             { content: item.code || '', styles: { cellPadding: 0.3 } },
             { content: item.description || '', styles: { cellPadding: 0.3 } },
             { content: item.units?.toString() || '', styles: { cellPadding: 0.3 } },

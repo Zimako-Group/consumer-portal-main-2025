@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, query, where, getDocs } from 'firebase/firestore';
+import { collection, writeBatch, doc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedLevied {
@@ -86,6 +86,10 @@ export const uploadDetailedLevied = async (
     progressCallback?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
     try {
+        // Check if db is initialized
+        if (!db) {
+            throw new Error('Firebase Firestore is not initialized');
+        }
         let totalProcessed = 0;
         let failedRecords = 0;
         let processedBatches = 0;
@@ -101,58 +105,77 @@ export const uploadDetailedLevied = async (
         });
         await deleteBatch.commit();
 
-        // Process records in batches
-        for (let i = 0; i < records.length; i += BATCH_SIZE) {
-            const batch = writeBatch(db);
-            const batchRecords = records.slice(i, i + BATCH_SIZE);
-
-            for (const record of batchRecords) {
-                try {
-                    const docRef = doc(detailedLeviedCollection);
-                    batch.set(docRef, {
-                        ...record,
-                        uploadedAt: new Date().toISOString()
-                    });
-                    totalProcessed++;
-                } catch (error) {
-                    console.error('Error processing record:', error);
-                    failedRecords++;
-                }
+        // Group records by account number
+        const recordsByAccount: { [accountNumber: string]: DetailedLevied[] } = {};
+        
+        for (const record of records) {
+            const accountNumber = record.ACCOUNT_NO;
+            if (!recordsByAccount[accountNumber]) {
+                recordsByAccount[accountNumber] = [];
             }
+            recordsByAccount[accountNumber].push(record);
+        }
 
+        // Process records by account number in batches
+        const accountNumbers = Object.keys(recordsByAccount);
+        let currentBatchSize = 0;
+        let currentBatch = writeBatch(db);
+        
+        for (let i = 0; i < accountNumbers.length; i++) {
+            const accountNumber = accountNumbers[i];
+            const accountRecords = recordsByAccount[accountNumber];
+            
             try {
-                await batch.commit();
-                processedBatches++;
-
-                if (progressCallback) {
-                    progressCallback({
-                        totalRecords,
-                        processedRecords: totalProcessed,
-                        failedRecords,
-                        currentBatch: processedBatches,
-                        totalBatches,
-                        status: 'processing'
-                    });
+                // Create a document for each account number
+                const accountDocRef = doc(detailedLeviedCollection, accountNumber);
+                
+                // Store the account records as a nested collection
+                currentBatch.set(accountDocRef, {
+                    accountNumber: accountNumber,
+                    recordCount: accountRecords.length,
+                    uploadedAt: new Date().toISOString(),
+                    records: accountRecords
+                });
+                
+                totalProcessed += accountRecords.length;
+                currentBatchSize++;
+                
+                // Commit when batch size reaches limit
+                if (currentBatchSize >= 500) { // Firestore batch limit
+                    await currentBatch.commit();
+                    processedBatches++;
+                    currentBatchSize = 0;
+                    currentBatch = writeBatch(db);
+                    
+                    if (progressCallback) {
+                        progressCallback({
+                            totalRecords,
+                            processedRecords: totalProcessed,
+                            failedRecords,
+                            currentBatch: processedBatches,
+                            totalBatches,
+                            status: 'processing'
+                        });
+                    }
+                    
+                    // Add a small delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 }
             } catch (error) {
-                console.error('Error committing batch:', error);
-                failedRecords += batchRecords.length;
-                
-                if (progressCallback) {
-                    progressCallback({
-                        totalRecords,
-                        processedRecords: totalProcessed,
-                        failedRecords,
-                        currentBatch: processedBatches,
-                        totalBatches,
-                        status: 'error',
-                        error: 'Error committing batch to database'
-                    });
-                }
+                console.error(`Error processing account ${accountNumber}:`, error);
+                failedRecords += accountRecords.length;
             }
-
-            // Add a small delay between batches to prevent overwhelming Firestore
-            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Commit any remaining records
+        if (currentBatchSize > 0) {
+            try {
+                await currentBatch.commit();
+                processedBatches++;
+            } catch (error) {
+                console.error('Error committing final batch:', error);
+                failedRecords += currentBatchSize;
+            }
         }
 
         if (progressCallback) {
@@ -198,21 +221,33 @@ export const uploadDetailedLevied = async (
 
 export const getDetailedLeviedForCustomer = async (accountNumber: string): Promise<AccountDetailsData[]> => {
     try {
-        const detailedLeviedCollection = collection(db, 'detailed_levied');
-        const q = query(detailedLeviedCollection, where('ACCOUNT_NO', '==', accountNumber));
-        const querySnapshot = await getDocs(q);
+        // Check if db is initialized
+        if (!db) {
+            console.error('Firebase Firestore is not initialized');
+            return [];
+        }
+        // Get the specific document for this account number
+        const detailedLeviedDoc = doc(db, 'detailed_levied', accountNumber);
+        const docSnapshot = await getDoc(detailedLeviedDoc);
 
+        if (!docSnapshot.exists()) {
+            console.log(`No detailed levied data found for account number: ${accountNumber}`);
+            return [];
+        }
+
+        const accountData = docSnapshot.data();
+        const records = accountData.records as DetailedLevied[];
         const accountDetails: AccountDetailsData[] = [];
         const currentDate = new Date().toISOString().split('T')[0];
 
-        querySnapshot.forEach((doc) => {
-            const data = doc.data() as DetailedLevied;
+        // Process all records for this account
+        records.forEach((record) => {
             accountDetails.push({
-                code: data.TARIFF_CODE,
-                description: data.TOS_DESC,
+                code: record.TARIFF_CODE,
+                description: record.TOS_DESC,
                 units: '1', // Adding a default units value
-                tariff: data.TOS_DESC,
-                value: data.M202409,
+                tariff: record.TOS_DESC,
+                value: record.M202409,
                 date: currentDate
             });
         });
