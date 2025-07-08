@@ -697,12 +697,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           // Add clickable link area
           doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
           
-          // Convert image to base64 if it's not already
-          const imgData = typeof logo.src === 'string' ? logo.src : (logo.src as Buffer).toString('base64');
-          
-          // Add the logo image with error handling
+          // Add the logo image with improved error handling
+          // Try to add the image directly first (works with imported PNG files)
           doc.addImage(
-            imgData,
+            logo.src,
             'PNG',
             logo.x,
             currentY,
@@ -711,10 +709,36 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           );
         } catch (error) {
           console.warn(`Failed to add bank logo for ${logo.url}:`, error);
-          // Draw a placeholder rectangle instead
-          doc.setDrawColor(200, 200, 200);
-          doc.setFillColor(240, 240, 240);
-          doc.rect(logo.x, currentY, logo.width, 7, 'FD');
+          try {
+            // Fallback: try to convert to proper base64 format if needed
+            const imgData = typeof logo.src === 'string' && logo.src.startsWith('data:') 
+              ? logo.src 
+              : `data:image/png;base64,${logo.src}`;
+            doc.addImage(
+              imgData,
+              'PNG',
+              logo.x,
+              currentY,
+              logo.width,
+              7
+            );
+          } catch (secondError) {
+            console.warn(`Fallback also failed for ${logo.url}:`, secondError);
+            // Draw a styled placeholder as last resort
+            doc.setDrawColor(0, 123, 255); // Blue border
+            doc.setFillColor(240, 248, 255); // Light blue background
+            doc.rect(logo.x, currentY, logo.width, 7, 'FD');
+            doc.setFontSize(6);
+            doc.setTextColor(0, 123, 255);
+            const bankName = logo.url.includes('absa') ? 'ABSA' : 
+                           logo.url.includes('capitec') ? 'CAPITEC' : 
+                           logo.url.includes('fnb') ? 'FNB' : 
+                           logo.url.includes('nedbank') ? 'NEDBANK' : 
+                           logo.url.includes('standard') ? 'STANDARD' : 
+                           logo.url.includes('african') ? 'AFRICAN' : 
+                           logo.url.includes('postoffice') ? 'POST' : 'BANK';
+            doc.text(bankName, logo.x + (logo.width/2), currentY + 3.5, { align: 'center' });
+          }
         }
       }
 
