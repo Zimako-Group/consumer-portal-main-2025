@@ -747,14 +747,11 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Add clickable link to the logo
       doc.link(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, { url: paymentUrl });
 
-      // Add YeboPay logo with error handling
+      // Add YeboPay logo with improved error handling
       try {
-        // Convert image to base64 if it's not already
-        const imgData = typeof yebopayLogo === 'string' ? yebopayLogo : (yebopayLogo as any).toString('base64');
-        
-        // Add the YeboPay logo image with simplified parameters
+        // Try to add the image directly first
         doc.addImage(
-          imgData,
+          yebopayLogo,
           'PNG',
           yeboPayLogoX,
           yeboPayLogoY,
@@ -762,14 +759,28 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           yeboPayLogoHeight
         );
       } catch (error) {
-        console.warn('Failed to add YeboPay logo:', error);
-        // Draw a placeholder rectangle with text
-        doc.setDrawColor(200, 200, 200);
-        doc.setFillColor(240, 240, 240);
-        doc.rect(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, 'FD');
-        doc.setFontSize(8);
-        doc.setTextColor(0, 0, 0);
-        doc.text('YeboPay', yeboPayLogoX + (yeboPayLogoWidth/2), yeboPayLogoY + (yeboPayLogoHeight/2), { align: 'center' });
+        console.warn('Failed to add YeboPay logo directly:', error);
+        try {
+          // Fallback: try to convert to base64 format
+          const imgData = yebopayLogo.startsWith('data:') ? yebopayLogo : `data:image/png;base64,${yebopayLogo}`;
+          doc.addImage(
+            imgData,
+            'PNG',
+            yeboPayLogoX,
+            yeboPayLogoY,
+            yeboPayLogoWidth,
+            yeboPayLogoHeight
+          );
+        } catch (secondError) {
+          console.warn('Fallback also failed:', secondError);
+          // Draw a styled placeholder as last resort
+          doc.setDrawColor(0, 123, 255); // Blue border
+          doc.setFillColor(240, 248, 255); // Light blue background
+          doc.rect(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, 'FD');
+          doc.setFontSize(10);
+          doc.setTextColor(0, 123, 255);
+          doc.text('YeboPay', yeboPayLogoX + (yeboPayLogoWidth/2), yeboPayLogoY + (yeboPayLogoHeight/2), { align: 'center' });
+        }
       }
 
       currentY += yeboPayLogoHeight + 3; // Reduced spacing after logo from 5 to 3
