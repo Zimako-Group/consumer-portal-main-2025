@@ -94,16 +94,35 @@ export const uploadDetailedLevied = async (
         let failedRecords = 0;
         let processedBatches = 0;
         const totalRecords = records.length;
-        const totalBatches = Math.ceil(totalRecords / BATCH_SIZE);
+        
+        // Use a much smaller batch size to prevent transaction too big errors
+        const MAX_BATCH_SIZE = 100; // Reduced from 400/500 to 100
+        const totalBatches = Math.ceil(totalRecords / MAX_BATCH_SIZE);
 
-        // Clear existing records first
+        // Instead of clearing all records at once, we'll do it in smaller batches
         const detailedLeviedCollection = collection(db, 'detailed_levied');
         const existingDocs = await getDocs(detailedLeviedCollection);
-        const deleteBatch = writeBatch(db);
-        existingDocs.forEach((doc) => {
-            deleteBatch.delete(doc.ref);
-        });
-        await deleteBatch.commit();
+        
+        // Delete in batches of 100
+        let deleteCount = 0;
+        let deleteBatch = writeBatch(db);
+        
+        for (const docSnapshot of existingDocs.docs) {
+            deleteBatch.delete(docSnapshot.ref);
+            deleteCount++;
+            
+            if (deleteCount >= 100) {
+                await deleteBatch.commit();
+                deleteBatch = writeBatch(db);
+                deleteCount = 0;
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+            }
+        }
+        
+        // Commit any remaining deletes
+        if (deleteCount > 0) {
+            await deleteBatch.commit();
+        }
 
         // Group records by account number
         const recordsByAccount: { [accountNumber: string]: DetailedLevied[] } = {};
@@ -116,36 +135,72 @@ export const uploadDetailedLevied = async (
             recordsByAccount[accountNumber].push(record);
         }
 
-        // Process records by account number in batches
+        // Process records by account number
         const accountNumbers = Object.keys(recordsByAccount);
-        let currentBatchSize = 0;
-        let currentBatch = writeBatch(db);
         
         for (let i = 0; i < accountNumbers.length; i++) {
             const accountNumber = accountNumbers[i];
             const accountRecords = recordsByAccount[accountNumber];
             
             try {
-                // Create a document for each account number
+                // Create a document for each account number with summary information only
                 const accountDocRef = doc(detailedLeviedCollection, accountNumber);
                 
-                // Store the account records as a nested collection
-                currentBatch.set(accountDocRef, {
+                // Create and commit a single batch just for the account summary
+                const summaryBatch = writeBatch(db);
+                summaryBatch.set(accountDocRef, {
                     accountNumber: accountNumber,
                     recordCount: accountRecords.length,
-                    uploadedAt: new Date().toISOString(),
-                    records: accountRecords
+                    uploadedAt: new Date().toISOString()
                 });
+                await summaryBatch.commit();
                 
-                totalProcessed += accountRecords.length;
-                currentBatchSize++;
+                // Create a subcollection for the detailed records
+                const recordsSubcollection = collection(accountDocRef, 'records');
                 
-                // Commit when batch size reaches limit
-                if (currentBatchSize >= 500) { // Firestore batch limit
-                    await currentBatch.commit();
+                // Process records in smaller batches
+                for (let j = 0; j < accountRecords.length; j += MAX_BATCH_SIZE) {
+                    const batchRecords = accountRecords.slice(j, j + MAX_BATCH_SIZE);
+                    const recordBatch = writeBatch(db);
+                    let batchSize = 0;
+                    
+                    for (let k = 0; k < batchRecords.length; k++) {
+                        const record = batchRecords[k];
+                        const recordIndex = j + k;
+                        const recordDocRef = doc(recordsSubcollection, `record_${recordIndex}`);
+                        
+                        // Store each record with minimal data
+                        // Extract only the essential fields to reduce document size
+                        recordBatch.set(recordDocRef, {
+                            ACCOUNT_NO: record.ACCOUNT_NO,
+                            TARIFF_CODE: record.TARIFF_CODE,
+                            TARIFF_DESC: record.TARIFF_DESC,
+                            TOS_CODE: record.TOS_CODE,
+                            TOS_DESC: record.TOS_DESC,
+                            M202409: record.M202409,
+                            M202410: record.M202410,
+                            M202411: record.M202411,
+                            M202412: record.M202412,
+                            M202501: record.M202501,
+                            M202502: record.M202502,
+                            M202503: record.M202503,
+                            M202504: record.M202504,
+                            M202505: record.M202505,
+                            M202506: record.M202506,
+                            M202507: record.M202507,
+                            M202508: record.M202508,
+                            TOTAL: record.TOTAL,
+                            recordIndex: recordIndex
+                            // Only include essential fields, omit others to reduce size
+                        });
+                        
+                        batchSize++;
+                    }
+                    
+                    // Commit this small batch
+                    await recordBatch.commit();
                     processedBatches++;
-                    currentBatchSize = 0;
-                    currentBatch = writeBatch(db);
+                    totalProcessed += batchSize;
                     
                     if (progressCallback) {
                         progressCallback({
@@ -153,28 +208,17 @@ export const uploadDetailedLevied = async (
                             processedRecords: totalProcessed,
                             failedRecords,
                             currentBatch: processedBatches,
-                            totalBatches,
+                            totalBatches: Math.ceil(totalRecords / MAX_BATCH_SIZE),
                             status: 'processing'
                         });
                     }
                     
-                    // Add a small delay between batches
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    // Add a delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 }
             } catch (error) {
                 console.error(`Error processing account ${accountNumber}:`, error);
                 failedRecords += accountRecords.length;
-            }
-        }
-        
-        // Commit any remaining records
-        if (currentBatchSize > 0) {
-            try {
-                await currentBatch.commit();
-                processedBatches++;
-            } catch (error) {
-                console.error('Error committing final batch:', error);
-                failedRecords += currentBatchSize;
             }
         }
 
@@ -184,7 +228,7 @@ export const uploadDetailedLevied = async (
                 processedRecords: totalProcessed,
                 failedRecords,
                 currentBatch: processedBatches,
-                totalBatches,
+                totalBatches: Math.ceil(totalRecords / 100), // Use consistent batch size
                 status: 'completed'
             });
         }
@@ -235,19 +279,27 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string): Promi
             return [];
         }
 
-        const accountData = docSnapshot.data();
-        const records = accountData.records as DetailedLevied[];
+        // Get all records from the subcollection
+        const recordsCollection = collection(detailedLeviedDoc, 'records');
+        const recordsSnapshot = await getDocs(recordsCollection);
+        
+        if (recordsSnapshot.empty) {
+            console.log(`No detailed records found for account number: ${accountNumber}`);
+            return [];
+        }
+        
         const accountDetails: AccountDetailsData[] = [];
         const currentDate = new Date().toISOString().split('T')[0];
 
         // Process all records for this account
-        records.forEach((record) => {
+        recordsSnapshot.forEach((doc) => {
+            const record = doc.data() as DetailedLevied;
             accountDetails.push({
-                code: record.TARIFF_CODE,
-                description: record.TOS_DESC,
+                code: record.TARIFF_CODE || 'N/A',
+                description: record.TOS_DESC || 'N/A',
                 units: '1', // Adding a default units value
-                tariff: record.TOS_DESC,
-                value: record.M202409,
+                tariff: record.TOS_DESC || 'N/A',
+                value: record.M202409 || 0,
                 date: currentDate
             });
         });

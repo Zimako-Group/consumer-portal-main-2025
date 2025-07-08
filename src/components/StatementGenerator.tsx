@@ -58,13 +58,37 @@ interface CustomerData {
   };
 }
 
-// Interface for account details data
+// Interface for account details data used in the statement
 interface AccountDetailsData {
   code?: string;
   description?: string;
   units?: string | number;
   tariff?: string | number;
   value?: number;
+}
+
+// Helper function to preload images synchronously
+function preloadImage(src: any): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Handle different types of image sources
+    let imgSrc = src;
+    if (typeof src === 'object' && src !== null && 'default' in src) {
+      imgSrc = (src as any).default;
+    }
+    
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = imgSrc as string;
+  });
 }
 
 interface CustomerInput {
@@ -223,6 +247,29 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
   };
 
   generateStatement = async (input: string | CustomerInput): Promise<void> => {
+    // Preload all logo images to ensure they're ready for PDF generation
+    let preloadedLogos: Record<string, string> = {};
+    try {
+      // Preload all logos in parallel
+      const logoPromises = [
+        preloadImage(logoImage).then(data => { preloadedLogos.municipal = data; }),
+        preloadImage(absaLogo).then(data => { preloadedLogos.absa = data; }),
+        preloadImage(fnbLogo).then(data => { preloadedLogos.fnb = data; }),
+        preloadImage(nedbankLogo).then(data => { preloadedLogos.nedbank = data; }),
+        preloadImage(standardBankLogo).then(data => { preloadedLogos.standardBank = data; }),
+        preloadImage(capitecLogo).then(data => { preloadedLogos.capitec = data; }),
+        preloadImage(africanBankLogo).then(data => { preloadedLogos.africanBank = data; }),
+        preloadImage(yebopayLogo).then(data => { preloadedLogos.yebopay = data; }),
+        preloadImage(postOfficeLogo).then(data => { preloadedLogos.postOffice = data; })
+      ];
+      
+      // Wait for all logos to preload
+      await Promise.allSettled(logoPromises);
+      console.log('Preloaded logos:', Object.keys(preloadedLogos));
+    } catch (error) {
+      console.warn('Error preloading logos:', error);
+      // Continue with generation even if preloading fails
+    }
     try {
       // Get the account number from either string input or customer object
       const accountNumber = typeof input === 'string' ? input : (input.accountNumber);
@@ -276,11 +323,15 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const municipalLogoX = margin.left - 8; // Moved left by 8mm
       const municipalLogoY = margin.top - 8; // Moved up further by 3mm (from -5 to -8)
 
-      // Add municipal logo with error handling
+      // Add municipal logo with production-safe error handling
       try {
+        // Use preloaded image if available, otherwise try direct approach
+        let imageSource = preloadedLogos.municipal || logoImage;
+        
+        // Try direct image addition first
         doc.addImage({
-          imageData: logoImage,
-          format: 'JPEG',
+          imageData: imageSource,
+          format: 'PNG',  // Changed from JPEG to PNG for consistency
           x: municipalLogoX,
           y: municipalLogoY,
           width: municipalLogoWidth,
@@ -289,13 +340,69 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           alias: 'municipal-logo'
         });
       } catch (error) {
-        console.warn('Failed to add municipal logo:', error);
-        // Draw a placeholder rectangle with text
-        doc.setDrawColor(200, 200, 200);
-        doc.setFillColor(240, 240, 240);
+        console.warn('First attempt to add municipal logo failed:', error);
+        try {
+          // Second attempt: Try with explicit base64 handling
+          // Create an Image element to load the image
+          const img = new Image();
+          img.crossOrigin = 'Anonymous'; // Handle CORS issues
+          
+          // Convert the image to a data URL using a canvas
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Set image source to logoImage (which might be a URL or object)
+          if (typeof logoImage === 'object' && logoImage !== null && 'default' in logoImage) {
+            img.src = (logoImage as any).default;
+          } else {
+            img.src = logoImage as string;
+          }
+          
+          // Wait for image to load and then convert to data URL
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            try {
+              // Now add the image using the data URL
+              doc.addImage({
+                imageData: dataUrl,
+                format: 'PNG',
+                x: municipalLogoX,
+                y: municipalLogoY,
+                width: municipalLogoWidth,
+                height: municipalLogoHeight,
+                compression: 'MEDIUM',
+                alias: 'municipal-logo'
+              });
+            } catch (thirdError) {
+              console.warn('Third attempt to add municipal logo failed:', thirdError);
+              // Final fallback - text placeholder
+              createMunicipalLogoPlaceholder();
+            }
+          };
+          
+          // Handle image loading errors
+          img.onerror = () => {
+            console.warn('Municipal image loading failed');
+            createMunicipalLogoPlaceholder();
+          };
+        } catch (secondError) {
+          console.warn('Second attempt to add municipal logo failed:', secondError);
+          createMunicipalLogoPlaceholder();
+        }
+      }
+      
+      // Helper function to create a placeholder for failed municipal logo loading
+      function createMunicipalLogoPlaceholder() {
+        // Draw a styled placeholder as last resort
+        doc.setDrawColor(0, 123, 255); // Blue border
+        doc.setFillColor(240, 248, 255); // Light blue background
         doc.rect(municipalLogoX, municipalLogoY, municipalLogoWidth, municipalLogoHeight, 'FD');
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(12);
+        doc.setTextColor(0, 123, 255);
         doc.text('MOHOKARE', municipalLogoX + (municipalLogoWidth/2), municipalLogoY + (municipalLogoHeight/2), { align: 'center' });
       }
       
@@ -697,10 +804,33 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           // Add clickable link area
           doc.link(logo.x, currentY, logo.width, 7, { url: logo.url });
           
-          // Add the logo image with improved error handling
-          // Try to add the image directly first (works with imported PNG files)
+          // Production-safe image handling
+          // Use preloaded image if available, otherwise try direct approach
+          let imageSource;
+          
+          // Determine which preloaded logo to use based on URL
+          if (logo.url.includes('absa')) {
+            imageSource = preloadedLogos.absa;
+          } else if (logo.url.includes('fnb')) {
+            imageSource = preloadedLogos.fnb;
+          } else if (logo.url.includes('nedbank')) {
+            imageSource = preloadedLogos.nedbank;
+          } else if (logo.url.includes('standard')) {
+            imageSource = preloadedLogos.standardBank;
+          } else if (logo.url.includes('capitec')) {
+            imageSource = preloadedLogos.capitec;
+          } else if (logo.url.includes('african')) {
+            imageSource = preloadedLogos.africanBank;
+          } else if (logo.url.includes('postoffice')) {
+            imageSource = preloadedLogos.postOffice;
+          }
+          
+          // Fall back to original source if preloaded version isn't available
+          imageSource = imageSource || logo.src;
+          
+          // Try direct image addition first
           doc.addImage(
-            logo.src,
+            imageSource,
             'PNG',
             logo.x,
             currentY,
@@ -708,38 +838,76 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
             7
           );
         } catch (error) {
-          console.warn(`Failed to add bank logo for ${logo.url}:`, error);
+          console.warn(`First attempt to add bank logo for ${logo.url} failed:`, error);
           try {
-            // Fallback: try to convert to proper base64 format if needed
-            const imgData = typeof logo.src === 'string' && logo.src.startsWith('data:') 
-              ? logo.src 
-              : `data:image/png;base64,${logo.src}`;
-            doc.addImage(
-              imgData,
-              'PNG',
-              logo.x,
-              currentY,
-              logo.width,
-              7
-            );
+            // Second attempt: Try with explicit base64 handling
+            // Create an Image element to load the image
+            const img = new Image();
+            img.crossOrigin = 'Anonymous'; // Handle CORS issues
+            
+            // Convert the image to a data URL using a canvas
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set image source to logo.src (which might be a URL or object)
+            if (typeof logo.src === 'object' && logo.src !== null && 'default' in logo.src) {
+              img.src = (logo.src as any).default;
+            } else {
+              img.src = logo.src as string;
+            }
+            
+            // Wait for image to load and then convert to data URL
+            img.onload = () => {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              ctx?.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL('image/png');
+              
+              try {
+                // Now add the image using the data URL
+                doc.addImage(
+                  dataUrl,
+                  'PNG',
+                  logo.x,
+                  currentY,
+                  logo.width,
+                  7
+                );
+              } catch (thirdError) {
+                console.warn(`Third attempt failed for ${logo.url}:`, thirdError);
+                // Final fallback - text placeholder
+                createLogoPlaceholder(logo);
+              }
+            };
+            
+            // Handle image loading errors
+            img.onerror = () => {
+              console.warn(`Image loading failed for ${logo.url}`);
+              createLogoPlaceholder(logo);
+            };
           } catch (secondError) {
-            console.warn(`Fallback also failed for ${logo.url}:`, secondError);
-            // Draw a styled placeholder as last resort
-            doc.setDrawColor(0, 123, 255); // Blue border
-            doc.setFillColor(240, 248, 255); // Light blue background
-            doc.rect(logo.x, currentY, logo.width, 7, 'FD');
-            doc.setFontSize(6);
-            doc.setTextColor(0, 123, 255);
-            const bankName = logo.url.includes('absa') ? 'ABSA' : 
-                           logo.url.includes('capitec') ? 'CAPITEC' : 
-                           logo.url.includes('fnb') ? 'FNB' : 
-                           logo.url.includes('nedbank') ? 'NEDBANK' : 
-                           logo.url.includes('standard') ? 'STANDARD' : 
-                           logo.url.includes('african') ? 'AFRICAN' : 
-                           logo.url.includes('postoffice') ? 'POST' : 'BANK';
-            doc.text(bankName, logo.x + (logo.width/2), currentY + 3.5, { align: 'center' });
+            console.warn(`Second attempt failed for ${logo.url}:`, secondError);
+            createLogoPlaceholder(logo);
           }
         }
+      }
+      
+      // Helper function to create a placeholder for failed logo loading
+      function createLogoPlaceholder(logo: any) {
+        // Draw a styled placeholder as last resort
+        doc.setDrawColor(0, 123, 255); // Blue border
+        doc.setFillColor(240, 248, 255); // Light blue background
+        doc.rect(logo.x, currentY, logo.width, 7, 'FD');
+        doc.setFontSize(6);
+        doc.setTextColor(0, 123, 255);
+        const bankName = logo.url.includes('absa') ? 'ABSA' : 
+                       logo.url.includes('capitec') ? 'CAPITEC' : 
+                       logo.url.includes('fnb') ? 'FNB' : 
+                       logo.url.includes('nedbank') ? 'NEDBANK' : 
+                       logo.url.includes('standard') ? 'STANDARD' : 
+                       logo.url.includes('african') ? 'AFRICAN' : 
+                       logo.url.includes('postoffice') ? 'POST' : 'BANK';
+        doc.text(bankName, logo.x + (logo.width/2), currentY + 3.5, { align: 'center' });
       }
 
       currentY += 10;
@@ -771,11 +939,14 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Add clickable link to the logo
       doc.link(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, { url: paymentUrl });
 
-      // Add YeboPay logo with improved error handling
+      // Add YeboPay logo with production-safe error handling
       try {
-        // Try to add the image directly first
+        // Use preloaded image if available, otherwise try direct approach
+        let imageSource = preloadedLogos.yebopay || yebopayLogo;
+        
+        // Try direct image addition first
         doc.addImage(
-          yebopayLogo,
+          imageSource,
           'PNG',
           yeboPayLogoX,
           yeboPayLogoY,
@@ -783,28 +954,68 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
           yeboPayLogoHeight
         );
       } catch (error) {
-        console.warn('Failed to add YeboPay logo directly:', error);
+        console.warn('First attempt to add YeboPay logo failed:', error);
         try {
-          // Fallback: try to convert to base64 format
-          const imgData = yebopayLogo.startsWith('data:') ? yebopayLogo : `data:image/png;base64,${yebopayLogo}`;
-          doc.addImage(
-            imgData,
-            'PNG',
-            yeboPayLogoX,
-            yeboPayLogoY,
-            yeboPayLogoWidth,
-            yeboPayLogoHeight
-          );
+          // Second attempt: Try with explicit base64 handling
+          // Create an Image element to load the image
+          const img = new Image();
+          img.crossOrigin = 'Anonymous'; // Handle CORS issues
+          
+          // Convert the image to a data URL using a canvas
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Set image source to yebopayLogo (which might be a URL or object)
+          if (typeof yebopayLogo === 'object' && yebopayLogo !== null && 'default' in yebopayLogo) {
+            img.src = (yebopayLogo as any).default;
+          } else {
+            img.src = yebopayLogo as string;
+          }
+          
+          // Wait for image to load and then convert to data URL
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            try {
+              // Now add the image using the data URL
+              doc.addImage(
+                dataUrl,
+                'PNG',
+                yeboPayLogoX,
+                yeboPayLogoY,
+                yeboPayLogoWidth,
+                yeboPayLogoHeight
+              );
+            } catch (thirdError) {
+              console.warn('Third attempt to add YeboPay logo failed:', thirdError);
+              // Final fallback - text placeholder
+              createYeboPayPlaceholder();
+            }
+          };
+          
+          // Handle image loading errors
+          img.onerror = () => {
+            console.warn('YeboPay image loading failed');
+            createYeboPayPlaceholder();
+          };
         } catch (secondError) {
-          console.warn('Fallback also failed:', secondError);
-          // Draw a styled placeholder as last resort
-          doc.setDrawColor(0, 123, 255); // Blue border
-          doc.setFillColor(240, 248, 255); // Light blue background
-          doc.rect(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, 'FD');
-          doc.setFontSize(10);
-          doc.setTextColor(0, 123, 255);
-          doc.text('YeboPay', yeboPayLogoX + (yeboPayLogoWidth/2), yeboPayLogoY + (yeboPayLogoHeight/2), { align: 'center' });
+          console.warn('Second attempt to add YeboPay logo failed:', secondError);
+          createYeboPayPlaceholder();
         }
+      }
+      
+      // Helper function to create a placeholder for failed YeboPay logo loading
+      function createYeboPayPlaceholder() {
+        // Draw a styled placeholder as last resort
+        doc.setDrawColor(0, 123, 255); // Blue border
+        doc.setFillColor(240, 248, 255); // Light blue background
+        doc.rect(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, 'FD');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 123, 255);
+        doc.text('YeboPay', yeboPayLogoX + (yeboPayLogoWidth/2), yeboPayLogoY + (yeboPayLogoHeight/2), { align: 'center' });
       }
 
       currentY += yeboPayLogoHeight + 3; // Reduced spacing after logo from 5 to 3
