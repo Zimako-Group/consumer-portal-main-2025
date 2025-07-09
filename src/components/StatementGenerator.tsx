@@ -1087,6 +1087,8 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('Statement generated successfully');
     } catch (error) {
       console.error('Error generating PDF:', error);
+      // Re-throw the error so calling components can handle it
+      throw error;
     }
   };
 

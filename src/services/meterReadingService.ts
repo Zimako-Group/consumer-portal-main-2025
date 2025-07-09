@@ -91,6 +91,11 @@ const validateAndFormatDate = (date: string): { year: string; month: string } =>
 const getMonthCollectionRef = (date: string) => {
   const { year, month } = validateAndFormatDate(date);
   console.log(`Creating collection reference for year: ${year}, month: ${month}`);
+  
+  if (!db) {
+    throw new Error('Firebase Firestore not initialized. Please check your Firebase configuration.');
+  }
+  
   return collection(db, 'meterReadings', year, month);
 };
 
@@ -110,6 +115,10 @@ export const uploadMeterReadings = async (
   };
 
   try {
+    if (!db) {
+      throw new Error('Firebase Firestore not initialized. Please check your Firebase configuration.');
+    }
+
     const uploadDate = readings[0].uploadDate;
     console.log(`Processing upload for date: ${uploadDate}`);
 
@@ -161,7 +170,7 @@ export const uploadMeterReadings = async (
   } catch (error) {
     console.error('Error in uploadMeterReadings:', error);
     progress.status = 'error';
-    progress.error = error.message;
+    progress.error = error instanceof Error ? error.message : 'An unknown error occurred';
     onProgress?.(progress);
     throw error;
   }
@@ -169,6 +178,10 @@ export const uploadMeterReadings = async (
 
 export const getMeterReadingsByDate = async (date: string): Promise<MeterReading[]> => {
   try {
+    if (!db) {
+      throw new Error('Firebase Firestore not initialized. Please check your Firebase configuration.');
+    }
+
     const { year, month } = validateAndFormatDate(date);
     const monthCollectionRef = collection(db, 'meterReadings', year, month);
     
@@ -189,6 +202,11 @@ export const getMeterReadingsForCustomer = async (
   date?: string
 ): Promise<MeterReading[]> => {
   try {
+    if (!db) {
+      console.warn('Firebase Firestore not initialized. Returning empty array.');
+      return [];
+    }
+
     // Default to 2024/09 as per your structure
     const defaultYear = '2024';
     const defaultMonth = '09';
@@ -257,8 +275,17 @@ export const getMeterReadingsForCustomer = async (
 
     console.log('Mapped meter reading:', meterReading);
     return [meterReading];
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching meter readings for customer:', error);
-    throw error;
+    
+    // Handle permission errors gracefully
+    if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+      console.warn('Permission denied for meter readings. Returning empty array.');
+      return [];
+    }
+    
+    // For other errors, still return empty array to allow statement generation to continue
+    console.warn('Failed to fetch meter readings, continuing with empty data.');
+    return [];
   }
 };

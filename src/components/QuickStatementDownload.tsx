@@ -3,6 +3,7 @@ import { db } from '../firebaseConfig';
 import { collection, getDocs } from 'firebase/firestore';
 import { Download, FileText, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { generateStatement } from './StatementGenerator';
 
 // Define Customer interface
 interface Customer {
@@ -118,8 +119,19 @@ const QuickStatementDownload: React.FC = () => {
       
       toast.loading('Generating your PDF statement...', { id: 'pdf-generation' });
       
-      // Use the existing StatementGenerator for client-side PDF generation
-      const { generateStatement } = await import('../components/StatementGenerator');
+      // Get current month and year for statement generation
+      const currentDate = new Date();
+      const currentMonth = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+      const currentYear = currentDate.getFullYear().toString();
+      
+      // Create customer input object for StatementGenerator
+      const customerInput = {
+        accountNumber: customer.accountNumber,
+        month: currentMonth,
+        year: currentYear
+      };
+      
+      console.log('📅 Generating statement for:', customerInput);
       
       // Create timeout promise
       const timeoutPromise = new Promise((_, reject) => {
@@ -128,7 +140,7 @@ const QuickStatementDownload: React.FC = () => {
       
       // Generate PDF with timeout
       await Promise.race([
-        generateStatement(customer.accountNumber),
+        generateStatement(customerInput),
         timeoutPromise
       ]);
       
