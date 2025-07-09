@@ -32,6 +32,7 @@ const TrainingPage = lazy(() => import('./pages/train-model'));
 const ModelTester = lazy(() => import('./chatbot-data/ModelTester'));
 const ChatInterface = lazy(() => import('./chatbot-data/ChatInterface'));
 const FloatingHelpButton = lazy(() => import('./components/FloatingHelpButton'));
+const QuickStatementDownload = lazy(() => import('./components/QuickStatementDownload'));
 
 interface User {
   email: string;
@@ -47,9 +48,15 @@ function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
+    if (!auth) {
+      console.error('Firebase auth not initialized');
+      setIsLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
-        if (user) {
+        if (user && db) {
           console.log('User authenticated:', user.uid);
           // Fetch user data from Firestore
           const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -74,6 +81,10 @@ function App() {
             setIsLoggedIn(false);
             setCurrentUser(null);
           }
+        } else if (user && !db) {
+          console.error('Firebase Firestore not initialized. Please check your Firebase configuration.');
+          setIsLoggedIn(false);
+          setCurrentUser(null);
         } else {
           setIsLoggedIn(false);
           setCurrentUser(null);
@@ -87,14 +98,20 @@ function App() {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const handleLogout = async () => {
     try {
       console.log('Starting logout process...');
       setIsLoading(true);
-      await auth.signOut();
+      if (auth) {
+        await auth.signOut();
+      }
       setIsLoggedIn(false);
       setCurrentUser(null);
       console.log('Logout successful, redirecting to home...');
@@ -322,6 +339,23 @@ function App() {
                       </Suspense>
                     }
                   />
+                }
+              />
+              
+              <Route
+                path="/statement"
+                element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <>
+                      <Navbar
+                        onLoginSuccess={handleLoginSuccess}
+                        onNewUserSignup={handleNewUserSignup}
+                      />
+                      <QuickStatementDownload />
+                      <Footer />
+                      <ScrollToTop />
+                    </>
+                  </Suspense>
                 }
               />
               
