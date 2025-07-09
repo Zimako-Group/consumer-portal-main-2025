@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedLevied {
@@ -99,30 +99,8 @@ export const uploadDetailedLevied = async (
         const MAX_BATCH_SIZE = 100; // Reduced from 400/500 to 100
         const totalBatches = Math.ceil(totalRecords / MAX_BATCH_SIZE);
 
-        // Instead of clearing all records at once, we'll do it in smaller batches
+        // Get reference to the detailed levied collection (preserving existing records)
         const detailedLeviedCollection = collection(db, 'detailed_levied');
-        const existingDocs = await getDocs(detailedLeviedCollection);
-        
-        // Delete in batches of 100
-        let deleteCount = 0;
-        let deleteBatch = writeBatch(db);
-        
-        for (const docSnapshot of existingDocs.docs) {
-            deleteBatch.delete(docSnapshot.ref);
-            deleteCount++;
-            
-            if (deleteCount >= 100) {
-                await deleteBatch.commit();
-                deleteBatch = writeBatch(db);
-                deleteCount = 0;
-                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
-            }
-        }
-        
-        // Commit any remaining deletes
-        if (deleteCount > 0) {
-            await deleteBatch.commit();
-        }
 
         // Group records by account number
         const recordsByAccount: { [accountNumber: string]: DetailedLevied[] } = {};
@@ -143,15 +121,18 @@ export const uploadDetailedLevied = async (
             const accountRecords = recordsByAccount[accountNumber];
             
             try {
-                // Create a document for each account number with summary information only
-                const accountDocRef = doc(detailedLeviedCollection, accountNumber);
+                // Create a unique document ID using account number and timestamp to avoid conflicts
+                const uploadTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const uniqueDocId = `${accountNumber}_${uploadTimestamp}`;
+                const accountDocRef = doc(detailedLeviedCollection, uniqueDocId);
                 
                 // Create and commit a single batch just for the account summary
                 const summaryBatch = writeBatch(db);
                 summaryBatch.set(accountDocRef, {
                     accountNumber: accountNumber,
                     recordCount: accountRecords.length,
-                    uploadedAt: new Date().toISOString()
+                    uploadedAt: new Date().toISOString(),
+                    uploadTimestamp: uploadTimestamp
                 });
                 await summaryBatch.commit();
                 
@@ -190,7 +171,9 @@ export const uploadDetailedLevied = async (
                             M202507: record.M202507,
                             M202508: record.M202508,
                             TOTAL: record.TOTAL,
-                            recordIndex: recordIndex
+                            recordIndex: recordIndex,
+                            uploadTimestamp: uploadTimestamp,
+                            uploadedAt: new Date().toISOString()
                             // Only include essential fields, omit others to reduce size
                         });
                         
@@ -270,40 +253,41 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string): Promi
             console.error('Firebase Firestore is not initialized');
             return [];
         }
-        // Get the specific document for this account number
-        const detailedLeviedDoc = doc(db, 'detailed_levied', accountNumber);
-        const docSnapshot = await getDoc(detailedLeviedDoc);
+        
+        // Query for all documents that start with the account number
+        const detailedLeviedCollection = collection(db, 'detailed_levied');
+        const q = query(detailedLeviedCollection, where('accountNumber', '==', accountNumber));
+        const querySnapshot = await getDocs(q);
 
-        if (!docSnapshot.exists()) {
+        if (querySnapshot.empty) {
             console.log(`No detailed levied data found for account number: ${accountNumber}`);
             return [];
         }
 
-        // Get all records from the subcollection
-        const recordsCollection = collection(detailedLeviedDoc, 'records');
-        const recordsSnapshot = await getDocs(recordsCollection);
-        
-        if (recordsSnapshot.empty) {
-            console.log(`No detailed records found for account number: ${accountNumber}`);
-            return [];
-        }
-        
         const accountDetails: AccountDetailsData[] = [];
         const currentDate = new Date().toISOString().split('T')[0];
 
-        // Process all records for this account
-        recordsSnapshot.forEach((doc) => {
-            const record = doc.data() as DetailedLevied;
-            accountDetails.push({
-                code: record.TARIFF_CODE || 'N/A',
-                description: record.TOS_DESC || 'N/A',
-                units: '1', // Adding a default units value
-                tariff: record.TOS_DESC || 'N/A',
-                value: record.M202409 || 0,
-                date: currentDate
+        // Process all documents for this account (there might be multiple uploads)
+        for (const docSnapshot of querySnapshot.docs) {
+            // Get all records from the subcollection of each document
+            const recordsCollection = collection(docSnapshot.ref, 'records');
+            const recordsSnapshot = await getDocs(recordsCollection);
+            
+            // Process all records from this upload
+            recordsSnapshot.forEach((recordDoc) => {
+                const record = recordDoc.data() as DetailedLevied;
+                accountDetails.push({
+                    code: record.TARIFF_CODE || 'N/A',
+                    description: record.TOS_DESC || 'N/A',
+                    units: '1', // Adding a default units value
+                    tariff: record.TOS_DESC || 'N/A',
+                    value: record.M202409 || 0,
+                    date: currentDate
+                });
             });
-        });
+        }
 
+        console.log(`Found ${accountDetails.length} detailed levied records for account ${accountNumber}`);
         return accountDetails;
     } catch (error) {
         console.error('Error fetching detailed levied data:', error);
