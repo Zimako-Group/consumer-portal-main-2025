@@ -2,6 +2,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   UserCredential 
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
@@ -22,6 +23,13 @@ export const signUp = async (
   accountNumber: string
 ): Promise<UserCredential> => {
   try {
+    if (!auth) {
+      throw new Error('Firebase Auth not initialized');
+    }
+    if (!db) {
+      throw new Error('Firebase Firestore not initialized');
+    }
+    
     // Create authentication user
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
@@ -55,6 +63,13 @@ export const signUp = async (
 
 export const signIn = async (email: string, password: string): Promise<UserData> => {
   try {
+    if (!auth) {
+      throw new Error('Firebase Auth not initialized');
+    }
+    if (!db) {
+      throw new Error('Firebase Firestore not initialized');
+    }
+    
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     
     // Get user data from Firestore
@@ -86,6 +101,10 @@ export const signIn = async (email: string, password: string): Promise<UserData>
 
 export const signOut = async (): Promise<void> => {
   try {
+    if (!auth) {
+      throw new Error('Firebase Auth not initialized');
+    }
+    
     const user = auth.currentUser;
     if (user) {
       // Track logout activity before signing out
@@ -107,6 +126,10 @@ export const signOut = async (): Promise<void> => {
 
 export const getUserData = async (uid: string): Promise<UserData | null> => {
   try {
+    if (!db) {
+      throw new Error('Firebase Firestore not initialized');
+    }
+    
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (!userDoc.exists()) {
       return null;
@@ -114,6 +137,32 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
     return userDoc.data() as UserData;
   } catch (error) {
     console.error('Error getting user data:', error);
+    throw error;
+  }
+};
+
+export const sendPasswordResetEmail = async (email: string): Promise<void> => {
+  try {
+    if (!auth) {
+      throw new Error('Firebase Auth not initialized');
+    }
+    
+    await firebaseSendPasswordResetEmail(auth, email);
+    
+    // Track password reset request activity
+    // We don't have a UID here since the user is not logged in
+    // So we'll just track the email
+    await trackUserActivity(
+      'anonymous',
+      'password-reset-request',
+      'AuthService',
+      {
+        email,
+        timestamp: new Date().toISOString()
+      }
+    );
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
     throw error;
   }
 };

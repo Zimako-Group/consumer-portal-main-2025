@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { signIn, signUp } from '../services/authService';
+import { signIn, signUp, sendPasswordResetEmail } from '../services/authService';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import AccountNumberInput from './AccountNumberInput';
 import PasswordInput, { isPasswordValid } from './PasswordInput';
@@ -209,8 +209,17 @@ export default function AuthModal({
     }
   };
 
-  const handleResetRequest = (email: string) => {
-    console.log('Password reset requested for:', email);
+  const handleResetRequest = async (email: string) => {
+    setIsLoading(true);
+    try {
+      await sendPasswordResetEmail(email);
+      // Success will be handled in the ForgotPasswordForm component
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
+      // Error will be handled in the ForgotPasswordForm component
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;

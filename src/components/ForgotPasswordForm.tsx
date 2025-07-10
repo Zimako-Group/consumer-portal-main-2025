@@ -3,18 +3,20 @@ import { ArrowLeft } from 'lucide-react';
 
 interface ForgotPasswordFormProps {
   onBack: () => void;
-  onResetRequest: (email: string) => void;
+  onResetRequest: (email: string) => Promise<void>;
 }
 
 export default function ForgotPasswordForm({ onBack, onResetRequest }: ForgotPasswordFormProps) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+    setIsLoading(true);
 
     if (!email) {
       setError('Please enter your email address');
@@ -27,13 +29,24 @@ export default function ForgotPasswordForm({ onBack, onResetRequest }: ForgotPas
     }
 
     try {
-      // Here you would integrate with Firebase Auth
-      // await firebase.auth().sendPasswordResetEmail(email);
-      onResetRequest(email);
+      // Call the onResetRequest function which now uses Firebase Auth
+      await onResetRequest(email);
       setSuccessMessage('Password reset link has been sent to your email');
       setEmail('');
-    } catch (err) {
-      setError('Failed to send reset email. Please try again.');
+    } catch (err: any) {
+      // Handle Firebase specific errors
+      if (err?.code === 'auth/user-not-found') {
+        setError('No account found with this email address');
+      } else if (err?.code === 'auth/invalid-email') {
+        setError('Invalid email format');
+      } else if (err?.code === 'auth/too-many-requests') {
+        setError('Too many password reset attempts. Please try again later.');
+      } else {
+        setError('Failed to send reset email. Please try again.');
+      }
+      console.error('Password reset error:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -84,9 +97,10 @@ export default function ForgotPasswordForm({ onBack, onResetRequest }: ForgotPas
 
         <button
           type="submit"
-          className="w-full bg-theme text-white py-2 px-4 rounded-lg hover:opacity-90 transition-opacity"
+          disabled={isLoading}
+          className="w-full bg-theme text-white py-2 px-4 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
         >
-          Send Reset Link
+          {isLoading ? 'Sending...' : 'Send Reset Link'}
         </button>
       </form>
     </div>
