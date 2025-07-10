@@ -274,7 +274,7 @@ const QuickStatementDownload: React.FC = () => {
                     <p className="font-medium mb-1">How it works:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
                       <li>Enter the last 4 digits of your phone number</li>
-                      <li>We'll find your account and generate your statement</li>
+                      <li>We'll find your account & generate your statement</li>
                       <li>Download your statement instantly</li>
                       <li>Visit our portal for account management</li>
                     </ul>
