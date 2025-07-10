@@ -199,42 +199,50 @@ const QuickStatementDownload: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-orange-500">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3 rounded-full">
-              <FileText className="text-white" size={32} />
+        <div className="max-w-md mx-auto sm:max-w-lg md:max-w-xl lg:max-w-2xl">
+          {/* Add extra padding at the top to prevent overlap with any fixed headers */}
+          <div className="pt-10 sm:pt-16"></div>
+          
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="inline-block bg-white dark:bg-gray-800 p-3 rounded-full shadow-md mb-6">
+              <FileText className="text-blue-600 dark:text-blue-400" size={32} />
             </div>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              Quick Statement Download
+            </h1>
+            <p className="text-white">
+              Enter the last 4 digits of your phone number to download your municipal statement
+            </p>
           </div>
-          <h1 className="text-medium font-bold text-gray-900 dark:text-white mb-2">
-            Quick Statement Download
-          </h1>
-          <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-            Enter the last 4 digits of your phone number to download your municipal statement
-          </p>
-        </div>
 
-        {/* Main Content */}
-        <div className="max-w-md mx-auto">
+          {/* Main Content */}
           {!showStatement ? (
-            /* Search Form */
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Phone className="inline mr-2" size={16} />
-                  Last 4 digits of your phone number
-                </label>
-                <input
-                  type="text"
-                  value={phoneDigits}
-                  onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="e.g., 1234"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-center text-xl font-mono"
-                  maxLength={4}
-                  disabled={isLoading}
-                />
+            <div className="space-y-4">
+              {/* Search Form */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
+                <div className="mb-6">
+                  <label htmlFor="phoneDigits" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Phone Number (Last 4 Digits)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Phone className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      id="phoneDigits"
+                      maxLength={4}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Enter last 4 digits"
+                      value={phoneDigits}
+                      onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
+                </div>
+
                 <p className="text-xs text-gray-500 mt-2 text-center">
                   Enter only the last 4 digits (e.g., if your number is 0721234567, enter 4567)
                 </p>
@@ -259,16 +267,16 @@ const QuickStatementDownload: React.FC = () => {
               </button>
 
               {/* Info Section */}
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <div className="flex items-start">
-                  <AlertCircle className="text-blue-500 mr-2 mt-0.5" size={16} />
-                  <div className="text-sm text-blue-700 dark:text-blue-300">
+              <div className="mt-6 p-3 sm:p-4 bg-orange-50 rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-start">
+                  <AlertCircle className="text-orange-500 mr-2 mt-0.5 hidden sm:block" size={16} />
+                  <div className="text-sm text-orange-700">
                     <p className="font-medium mb-1">How it works:</p>
                     <ul className="list-disc list-inside space-y-1 text-xs">
-                      <li>Enter the last 4 digits of your registered phone number</li>
+                      <li>Enter the last 4 digits of your phone number</li>
                       <li>We'll find your account and generate your statement</li>
                       <li>Download your statement instantly</li>
-                      <li>Visit our portal for payments and account management</li>
+                      <li>Visit our portal for account management</li>
                     </ul>
                   </div>
                 </div>
@@ -276,7 +284,7 @@ const QuickStatementDownload: React.FC = () => {
             </div>
           ) : (
             /* Statement Display */
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
               <div className="text-center mb-6">
                 <CheckCircle className="text-green-500 mx-auto mb-2" size={48} />
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
@@ -288,12 +296,12 @@ const QuickStatementDownload: React.FC = () => {
               </div>
 
               {/* Customer Info */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 mb-6 border-l-4 border-blue-500 text-center">
+              <div className="bg-orange-50 dark:bg-gray-700 rounded-lg p-4 sm:p-6 mb-6 border-l-4 border-orange-500 text-center">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-lg">Account Details</h3>
                 <div className="space-y-3">
                   <div className="flex flex-col items-center">
                     <span className="text-sm text-gray-500 dark:text-gray-400">Account Number</span>
-                    <p className="text-lg font-bold text-white dark:text-white">
+                    <p className="text-lg font-bold text-orange-600 dark:text-white">
                       {customer?.accountNumber || 'N/A'}
                     </p>
                   </div>
@@ -305,7 +313,7 @@ const QuickStatementDownload: React.FC = () => {
                   </div>
                   <div className="flex flex-col items-center">
                     <span className="text-sm text-gray-500 dark:text-gray-400">Outstanding Balance</span>
-                    <p className="text-xl font-bold text-white dark:text-white">
+                    <p className="text-xl font-bold text-orange-600 dark:text-white">
                       R{(customer?.outstandingTotalBalance || 0).toFixed(2)}
                     </p>
                   </div>
@@ -357,9 +365,9 @@ const QuickStatementDownload: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-gray-500 dark:text-gray-400 text-sm">
+        <div className="text-center mt-8 text-white text-sm">
           <p>Mohokare Municipality - Quick Statement Access</p>
-          <p>For support, visit <a href="https://consumerportal.co.za" className="text-blue-600 hover:text-blue-700">consumerportal.co.za</a></p>
+          <p>For support, visit <a href="https://consumerportal.co.za" className="text-white font-bold hover:text-orange-200">consumerportal.co.za</a></p>
         </div>
       </div>
     </div>
