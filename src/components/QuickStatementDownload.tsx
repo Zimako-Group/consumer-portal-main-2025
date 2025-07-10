@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, getDocs } from 'firebase/firestore';
-import { Download, FileText, Phone, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { Download, FileText, Phone, AlertCircle, CheckCircle, Loader, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { generateStatement } from './StatementGenerator';
+import { useNavigate } from 'react-router-dom';
 
 // Define Customer interface
 interface Customer {
@@ -23,6 +24,7 @@ const QuickStatementDownload: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [showStatement, setShowStatement] = useState(false);
+  const navigate = useNavigate();
 
   // Component load debugging
   console.log('🚀 QuickStatementDownload component loaded/re-rendered');
@@ -103,6 +105,23 @@ const QuickStatementDownload: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePayNow = () => {
+    if (!customer) {
+      toast.error('Customer information not available');
+      return;
+    }
+    
+    // Format the amount properly to ensure it's passed correctly
+    const amount = customer.outstandingTotalBalance || 0;
+    const formattedAmount = amount.toString();
+    
+    // Create the payment URL with properly encoded parameters
+    const paymentUrl = `/yebopay-payment/${encodeURIComponent(customer.accountNumber)}/${encodeURIComponent(customer.accountHolderName || customer.name || 'Unknown')}/${encodeURIComponent(formattedAmount)}`;
+    
+    // Navigate to the payment page
+    navigate(paymentUrl);
   };
 
   const handleDownloadStatement = async () => {
@@ -301,6 +320,14 @@ const QuickStatementDownload: React.FC = () => {
                 >
                   <Download className="mr-2" size={20} />
                   Download Statement
+                </button>
+                
+                <button
+                  onClick={handlePayNow}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center"
+                >
+                  <CreditCard className="mr-2" size={20} />
+                  Pay Now
                 </button>
 
                 <button

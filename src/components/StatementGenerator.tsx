@@ -934,7 +934,12 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
 
       // Create a special URL that will be intercepted by our application
       // This URL will work in the downloaded PDF and can be handled when clicked
-      const paymentUrl = `${window.location.origin}/yebopay-payment/${encodeURIComponent(customerData.accountNumber)}/${encodeURIComponent(customerData.accountHolderName)}/${encodeURIComponent(customerData.outstandingTotalBalance)}`;
+      // Ensure we have a valid amount by checking both outstandingBalance and outstandingTotalBalance
+      const outstandingAmount = customerData.outstandingBalance || customerData.outstandingTotalBalance || 0;
+      // Format the amount properly to ensure it's passed correctly as a string
+      const formattedAmount = typeof outstandingAmount === 'number' ? outstandingAmount.toString() : outstandingAmount;
+      
+      const paymentUrl = `${window.location.origin}/yebopay-payment/${encodeURIComponent(customerData.accountNumber)}/${encodeURIComponent(customerData.accountHolderName)}/${encodeURIComponent(formattedAmount)}`;
       
       // Add clickable link to the logo
       doc.link(yeboPayLogoX, yeboPayLogoY, yeboPayLogoWidth, yeboPayLogoHeight, { url: paymentUrl });
