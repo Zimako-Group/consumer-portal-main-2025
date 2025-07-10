@@ -207,12 +207,17 @@ const QuickStatementDownload: React.FC = () => {
           
           {/* Header */}
           <div className="text-center mb-8">
+            {/* Municipality Name */}
+            <h1 className="text-3xl font-bold text-white mb-6">
+              Mohokare Local Municipality
+            </h1>
+            
             <div className="inline-block bg-white dark:bg-gray-800 p-3 rounded-full shadow-md mb-6">
               <FileText className="text-blue-600 dark:text-blue-400" size={32} />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-2xl font-bold text-white mb-2">
               Quick Statement Download
-            </h1>
+            </h2>
             <p className="text-white">
               Enter the last 4 digits of your phone number to download your municipal statement
             </p>

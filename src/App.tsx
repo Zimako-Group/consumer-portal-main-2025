@@ -347,10 +347,6 @@ function App() {
                 element={
                   <Suspense fallback={<LoadingSpinner />}>
                     <>
-                      <Navbar
-                        onLoginSuccess={handleLoginSuccess}
-                        onNewUserSignup={handleNewUserSignup}
-                      />
                       <QuickStatementDownload />
                       <Footer />
                       <ScrollToTop />
