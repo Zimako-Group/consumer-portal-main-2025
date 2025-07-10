@@ -10,9 +10,11 @@ interface Customer {
   id: string;
   accountNumber: string;
   name?: string;
+  accountHolderName?: string;
   phone?: string;
   phoneNumber?: string;
   outstandingTotalBalance?: number;
+  outstandingBalance?: number;
   [key: string]: any; // For other potential properties
 }
 
@@ -70,11 +72,12 @@ const QuickStatementDownload: React.FC = () => {
           // Create a properly typed customer object
           const customer: Customer = {
             id: doc.id,
-            accountNumber: doc.id, // Use document ID as account number
+            accountNumber: data.accountNumber || doc.id, // Use accountNumber field or document ID as fallback
             name: data.name || '',
+            accountHolderName: data.accountHolderName || '',
             phone: data.phone || '',
             phoneNumber: data.phoneNumber || '',
-            outstandingTotalBalance: data.outstandingTotalBalance || 0
+            outstandingTotalBalance: data.outstandingBalance || data.outstandingTotalBalance || 0
           };
           
           matchingCustomer = customer;
@@ -261,17 +264,32 @@ const QuickStatementDownload: React.FC = () => {
                   Statement Ready!
                 </h2>
                 <p className="text-gray-600 dark:text-gray-300">
-                  We found your account. Click below to download your statement.
+                  We found your account for <span className="font-semibold">{customer?.accountHolderName || customer?.name || 'N/A'}</span>. Click below to download your statement.
                 </p>
               </div>
 
               {/* Customer Info */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Account Details</h3>
-                <div className="space-y-1 text-sm">
-                  <p><span className="font-medium">Account:</span> {customer?.accountNumber || 'N/A'}</p>
-                  <p><span className="font-medium">Name:</span> {customer?.name || 'N/A'}</p>
-                  <p><span className="font-medium">Balance:</span> R{(customer?.outstandingTotalBalance || 0).toFixed(2)}</p>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 mb-6 border-l-4 border-blue-500 text-center">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-lg">Account Details</h3>
+                <div className="space-y-3">
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Account Number</span>
+                    <p className="text-lg font-bold text-white dark:text-white">
+                      {customer?.accountNumber || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Customer Name</span>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">
+                      {customer?.accountHolderName || customer?.name || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Outstanding Balance</span>
+                    <p className="text-xl font-bold text-white dark:text-white">
+                      R{(customer?.outstandingTotalBalance || 0).toFixed(2)}
+                    </p>
+                  </div>
                 </div>
               </div>
 

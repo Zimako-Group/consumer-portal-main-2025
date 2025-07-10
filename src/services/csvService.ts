@@ -189,7 +189,7 @@ const processCsvFile = async (file: File): Promise<{ data: any[]; errors: any[] 
   });
 };
 
-export const processCustomerFile = async (file: File): Promise<{ success: boolean; message: string }> => {
+export const processCustomerFile = async (file: File): Promise<{ success: boolean; message: string; data: any[] }> => {
   try {
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     let parseResult;
@@ -208,7 +208,15 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
 
     const totalRecords = parseResult.data.length;
     console.log(`Starting to process ${totalRecords} records...`);
-
+    
+    // Store parsed data for return value
+    const parsedData = parseResult.data;
+    
+    // Check if db is initialized
+    if (!db) {
+      throw new Error('Firebase Firestore is not initialized');
+    }
+    
     let batch = writeBatch(db);
     const customersRef = collection(db, 'customers');
     let processedCount = 0;
@@ -261,8 +269,8 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
         updatedAt: new Date().toISOString(),
       };
       
-      // Store additional data in a separate metadata object
-      const additionalData = {
+      // Additional data fields that could be used in the future
+      /* const additionalData = {
         vatRegNumber: getValueFromRow(row, 'VAT REG NUMBER', ['VAT REGISTRATION', 'VAT NUMBER']) as string,
         companyCcNumber: getValueFromRow(row, 'COMPANY CC NUMBER', ['COMPANY NUMBER', 'CC NUMBER']) as string,
         occupantOwner: getValueFromRow(row, 'OCC/OWN', ['OCCUPANT/OWNER', 'OCCUPANT OWNER']) as string,
@@ -301,6 +309,8 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
         ],
       };
       
+      */ 
+      
       // For debugging
       console.debug(`Processing customer: ${customerData.accountNumber}, Balance: ${customerData.outstandingBalance}`);
 
@@ -308,8 +318,7 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
       // Set the main customer data
       batch.set(customerDoc, customerData);
       
-      // Store additional data in a separate collection if needed
-      // We're not using additionalData right now, but it's available if needed in the future
+      // Store additional data in a separate collection if needed in the future
       // batch.set(doc(collection(db, 'customer_metadata'), documentId), additionalData);
       processedCount++;
       batchCount++;
@@ -345,10 +354,15 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
 
     return {
       success: true,
-      message: `Successfully processed ${processedCount} records`
+      message: `Successfully processed ${processedCount} records`,
+      data: parsedData // Include the parsed data in the return value
     };
   } catch (error) {
     console.error('Error processing file:', error);
-    throw error;
+    return {
+      success: false,
+      message: `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      data: []
+    };
   }
 };

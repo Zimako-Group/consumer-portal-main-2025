@@ -1,14 +1,123 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { DetailedLevied, uploadDetailedLevied, UploadProgress } from '../services/detailedLeviedService';
+import { getLastUploadTimestamp, updateUploadTimestamp } from '../services/uploadTimestampService';
+import { Listbox, Transition } from '@headlessui/react';
+import { ChevronUpDownIcon } from '@heroicons/react/20/solid';
+import { format } from 'date-fns';
+
+// Interface for raw data from uploaded file (before processing)
+interface RawDetailedLevied {
+    ACCOUNT_NO: string;
+    TARIFF_CODE: string;
+    TARIFF_DESC: string;
+    TOS_CODE: string;
+    TOS_DESC: string;
+    M202409: string | number;
+    M202410: string | number;
+    M202411: string | number;
+    M202412: string | number;
+    M202501: string | number;
+    M202502: string | number;
+    M202503: string | number;
+    M202504: string | number;
+    M202505: string | number;
+    M202506: string | number;
+    M202507: string | number;
+    M202508: string | number;
+    TOTAL: string | number;
+    [key: string]: string | number; // For other fields
+}
+
+// Month option interface for the dropdown
+interface MonthOption {
+    id: string;
+    name: string;
+    value: string; // YYYY-MM format
+}
 
 const DetailedLeviedUpload: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<string>('');
     const [lastUpload, setLastUpload] = useState<string>('');
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+    const [selectedMonth, setSelectedMonth] = useState<MonthOption | null>(null);
+    const [isMonthValid, setIsMonthValid] = useState<boolean>(false);
+
+    // Generate month options from Jan 2024 to current month
+    const monthOptions = useMemo(() => {
+        const options: MonthOption[] = [];
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-indexed
+
+        // Start from January 2024
+        const startYear = 2024;
+        
+        for (let year = startYear; year <= currentYear; year++) {
+            // If it's the current year, only show months up to the current month
+            const monthLimit = year === currentYear ? currentMonth + 1 : 12;
+            
+            for (let month = 0; month < monthLimit; month++) {
+                const date = new Date(year, month, 1);
+                const monthValue = `${year}-${String(month + 1).padStart(2, '0')}`;
+                options.push({
+                    id: monthValue,
+                    name: format(date, 'MMMM yyyy'),
+                    value: monthValue
+                });
+            }
+        }
+        
+        // Sort in descending order (newest first)
+        return options.sort((a, b) => b.value.localeCompare(a.value));
+    }, []);
+
+    // Fetch last upload timestamp on component mount
+    useEffect(() => {
+        const fetchLastUpload = async () => {
+            try {
+                const timestamp = await getLastUploadTimestamp('detailed_levied');
+                if (timestamp) {
+                    setLastUpload(format(new Date(timestamp), 'dd/MM/yyyy HH:mm'));
+                }
+            } catch (error) {
+                console.error('Error fetching last upload timestamp:', error);
+            }
+        };
+        
+        fetchLastUpload();
+    }, []);
+
+    // Validate selected month whenever it changes
+    useEffect(() => {
+        if (!selectedMonth) {
+            setIsMonthValid(false);
+            return;
+        }
+        
+        try {
+            const dateMatch = selectedMonth.value.match(/^(\d{4})-(\d{2})$/);
+            if (!dateMatch) {
+                setIsMonthValid(false);
+                return;
+            }
+            
+            const [_, year, month] = dateMatch;
+            const yearNum = parseInt(year);
+            const monthNum = parseInt(month);
+            
+            setIsMonthValid(
+                yearNum >= 2024 && 
+                monthNum >= 1 && 
+                monthNum <= 12
+            );
+        } catch (error) {
+            setIsMonthValid(false);
+        }
+    }, [selectedMonth]);
 
     const handleProgress = (progress: UploadProgress) => {
         setUploadProgress(progress);
@@ -19,8 +128,10 @@ const DetailedLeviedUpload: React.FC = () => {
                 setUploadStatus(`Processing: ${percentComplete}% complete (${progress.processedRecords}/${progress.totalRecords} records, Batch ${progress.currentBatch}/${progress.totalBatches})`);
                 break;
             case 'completed':
+                // Update the last upload timestamp
+                updateUploadTimestamp('detailed_levied');
                 const now = new Date();
-                const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const formattedDate = format(now, 'dd/MM/yyyy HH:mm');
                 setLastUpload(formattedDate);
                 setUploadStatus(`Upload completed: ${progress.processedRecords} records processed, ${progress.failedRecords} failed`);
                 break;
@@ -32,6 +143,12 @@ const DetailedLeviedUpload: React.FC = () => {
 
     const processFile = async (fileContent: string | ArrayBuffer, fileName: string) => {
         try {
+            if (!selectedMonth || !isMonthValid) {
+                throw new Error('Please select a valid month before uploading');
+            }
+            
+            // Use RawDetailedLevied for parsing and DetailedLevied for upload
+            let rawRecords: RawDetailedLevied[] = [];
             let records: DetailedLevied[] = [];
 
             const processRow = (row: any): DetailedLevied => ({
@@ -94,7 +211,7 @@ const DetailedLeviedUpload: React.FC = () => {
                     skipEmptyLines: true,
                 });
 
-                records = result.data.map(processRow);
+                rawRecords = result.data as RawDetailedLevied[];
             } else {
                 // Process XLSX file
                 const workbook = XLSX.read(fileContent, { type: 'array' });
@@ -102,8 +219,11 @@ const DetailedLeviedUpload: React.FC = () => {
                 const worksheet = workbook.Sheets[sheetName];
                 const data = XLSX.utils.sheet_to_json(worksheet);
 
-                records = data.map(processRow);
+                rawRecords = data as RawDetailedLevied[];
             }
+            
+            // Convert raw records to typed DetailedLevied records
+            records = rawRecords.map(processRow);
 
             // Validate records before upload
             if (records.length === 0) {
@@ -133,7 +253,43 @@ const DetailedLeviedUpload: React.FC = () => {
                 throw new Error('No valid records found after filtering empty rows');
             }
 
-            await uploadDetailedLevied(records, handleProgress);
+            // Process the data and upload
+            const result = await uploadDetailedLevied(
+                records.map(record => ({
+                    ...record,
+                    // Convert string values to numbers
+                    M202409: Number(record.M202409) || 0,
+                    M202410: Number(record.M202410) || 0,
+                    M202411: Number(record.M202411) || 0,
+                    M202412: Number(record.M202412) || 0,
+                    M202501: Number(record.M202501) || 0,
+                    M202502: Number(record.M202502) || 0,
+                    M202503: Number(record.M202503) || 0,
+                    M202504: Number(record.M202504) || 0,
+                    M202505: Number(record.M202505) || 0,
+                    M202506: Number(record.M202506) || 0,
+                    M202507: Number(record.M202507) || 0,
+                    M202508: Number(record.M202508) || 0,
+                    TOTAL: Number(record.TOTAL) || 0,
+                })) as DetailedLevied[],
+                selectedMonth.value,
+                handleProgress
+            );
+            
+            if (result.success) {
+                // Update the upload timestamp
+                try {
+                    await updateUploadTimestamp('detailed_levied');
+                    const now = new Date();
+                    setLastUpload(format(now, 'dd/MM/yyyy HH:mm'));
+                } catch (timestampError) {
+                    console.error('Error updating timestamp:', timestampError);
+                }
+                
+                setUploadStatus(`Upload successful: ${result.totalRecords} records processed`);
+            } else {
+                setUploadStatus(`Upload failed: ${result.message}`);
+            }
         } catch (error) {
             console.error('Error processing file:', error);
             setUploadStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
@@ -143,6 +299,11 @@ const DetailedLeviedUpload: React.FC = () => {
 
     const onDrop = useCallback(async (acceptedFiles: File[]) => {
         if (acceptedFiles.length === 0) return;
+        
+        if (!selectedMonth || !isMonthValid) {
+            setUploadStatus('Please select a valid month before uploading');
+            return;
+        }
 
         setIsUploading(true);
         setUploadStatus('Processing file...');
@@ -190,25 +351,80 @@ const DetailedLeviedUpload: React.FC = () => {
                 )}
             </div>
 
-            <div className="space-y-2">
-                <p className="text-sm font-medium dark:text-white text-black">Select CSV or Excel File</p>
-                <div className="relative">
-                    <div 
-                        {...getRootProps()} 
-                        className={`flex items-center justify-between bg-dark-card dark:bg-dark-card rounded-lg p-3 cursor-pointer border border-gray-600 ${
-                            isUploading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                    >
-                        <input {...getInputProps()} disabled={isUploading} />
-                        <button 
-                            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition-colors disabled:opacity-50"
-                            disabled={isUploading}
+            <div className="space-y-4">
+                {/* Month Selection */}
+                <div>
+                    <p className="text-sm font-medium dark:text-white text-black mb-2">Select Month</p>
+                    <Listbox value={selectedMonth} onChange={setSelectedMonth}>
+                        <div className="relative mt-1">
+                            <Listbox.Button className="relative w-full cursor-pointer rounded-lg bg-dark-card dark:bg-dark-card py-2 pl-3 pr-10 text-left border border-gray-600 focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm">
+                                <span className="block truncate text-gray-300">
+                                    {selectedMonth ? selectedMonth.name : 'Select a month'}
+                                </span>
+                                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                                    <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                                </span>
+                            </Listbox.Button>
+                            <Transition
+                                as={React.Fragment}
+                                leave="transition ease-in duration-100"
+                                leaveFrom="opacity-100"
+                                leaveTo="opacity-0"
+                            >
+                                <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-dark-card dark:bg-dark-card py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+                                    {monthOptions.map((month) => (
+                                        <Listbox.Option
+                                            key={month.id}
+                                            className={({ active }) =>
+                                                `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-orange-100 text-orange-900' : 'text-gray-300'}`
+                                            }
+                                            value={month}
+                                        >
+                                            {({ selected }) => (
+                                                <>
+                                                    <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                                        {month.name}
+                                                    </span>
+                                                    {selected ? (
+                                                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-orange-600">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </span>
+                                                    ) : null}
+                                                </>
+                                            )}
+                                        </Listbox.Option>
+                                    ))}
+                                </Listbox.Options>
+                            </Transition>
+                        </div>
+                    </Listbox>
+                    {!isMonthValid && selectedMonth && (
+                        <p className="text-red-500 text-xs mt-1">Please select a valid month</p>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <p className="text-sm font-medium dark:text-white text-black">Select CSV or Excel File</p>
+                    <div className="relative">
+                        <div 
+                            {...getRootProps()} 
+                            className={`flex items-center justify-between bg-dark-card dark:bg-dark-card rounded-lg p-3 cursor-pointer border border-gray-600 ${
+                                isUploading || !isMonthValid ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                         >
-                            {isUploading ? 'Uploading...' : 'Choose File'}
-                        </button>
-                        <span className="text-gray-400">
-                            {isDragActive ? "Drop the file here..." : "No file chosen"}
-                        </span>
+                            <input {...getInputProps()} disabled={isUploading || !isMonthValid} />
+                            <button 
+                                className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition-colors disabled:opacity-50"
+                                disabled={isUploading || !isMonthValid}
+                            >
+                                {isUploading ? 'Uploading...' : 'Choose File'}
+                            </button>
+                            <span className="text-gray-400">
+                                {isDragActive ? "Drop the file here..." : "No file chosen"}
+                            </span>
+                        </div>
                     </div>
                 </div>
                 <p className="text-sm text-gray-500">Supported formats: CSV, XLSX, XLS</p>

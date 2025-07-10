@@ -1,7 +1,7 @@
 import { db } from '../firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-export type UploadType = 'meterReadings' | 'csmBalance' | 'detailedAged';
+export type UploadType = 'meterReadings' | 'csmBalance' | 'detailedAged' | 'detailed_levied';
 
 export const updateUploadTimestamp = async (type: UploadType): Promise<void> => {
     try {
