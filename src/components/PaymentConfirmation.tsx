@@ -88,28 +88,28 @@ const PaymentConfirmation: React.FC = () => {
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
         <div className="flex flex-col md:flex-row">
           {/* Left Side - Customer Details */}
-          <div className="flex-1 p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
-            <h3 className="text-xl font-semibold mb-6 text-blue-100">Customer Details</h3>
+          <div className="flex-1 p-8 bg-gradient-to-br from-orange-500 to-orange-600 text-white text-center">
+            <h3 className="text-xl font-semibold mb-6 text-orange-100">Customer Details</h3>
             <div className="space-y-6">
               <div>
-                <label className="block text-sm text-blue-200">Account Number</label>
+                <label className="block text-sm text-orange-200">Account Number</label>
                 <div className="mt-1 text-lg font-semibold">{accountNo}</div>
               </div>
               
               <div>
-                <label className="block text-sm text-blue-200">Account Holder</label>
+                <label className="block text-sm text-orange-200">Account Holder</label>
                 <div className="mt-1 text-lg font-semibold">{customerName}</div>
               </div>
               
               <div>
-                <label className="block text-sm text-blue-200">Outstanding Amount</label>
+                <label className="block text-sm text-orange-200">Outstanding Amount</label>
                 <div className="mt-1 text-3xl font-bold">R {amount}</div>
               </div>
             </div>
           </div>
 
           {/* Right Side - Municipality Banking Details */}
-          <div className="flex-1 p-8 bg-gray-50 bank-details-section">
+          <div className="flex-1 p-8 bg-gray-50 bank-details-section text-center">
             <h3 className="text-xl font-semibold mb-6 text-gray-900">Municipality Banking Details</h3>
             <div className="space-y-4">
               <div>
