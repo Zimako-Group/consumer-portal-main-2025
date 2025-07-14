@@ -775,7 +775,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Draw remittance advice details
       drawDetailRow(leftColumnX, currentY + 4, 'ACCOUNT NUMBER:', customerData.accountNumber || '');
       drawDetailRow(leftColumnX, currentY + 8, 'CONSUMER NAME:', customerData.accountHolderName || '');
-      drawDetailRow(leftColumnX, currentY + 12, 'TOTAL DUE:', `R ${customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`);
+      drawDetailRow(leftColumnX, currentY + 12, 'TOTAL DUE:', `R ${closingBalanceFormatted}`);
       drawDetailRow(leftColumnX, currentY + 16, 'TOTAL DUE ON OR BEFORE:', '2024-09-31');
 
       // Draw banking details with consistent alignment
