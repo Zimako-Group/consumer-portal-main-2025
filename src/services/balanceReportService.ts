@@ -145,13 +145,21 @@ export const uploadBalanceReports = async (
       const batchReports = reports.slice(i, i + BATCH_SIZE);
 
       for (const report of batchReports) {
+        // Validate that accountNumber is not empty
+        if (!report.accountNumber || report.accountNumber.toString().trim() === '') {
+          console.warn('Skipping report with empty account number:', report);
+          progress.failedRecords++;
+          continue;
+        }
+
         // Add month and year fields for easier querying
         report.month = month;
         report.year = year;
         report.uploadTimestamp = new Date().toISOString();
 
-        // Use accountNumber as document ID
-        const docRef = doc(monthCollectionRef, report.accountNumber);
+        // Use accountNumber as document ID (sanitize it to ensure it's valid)
+        const sanitizedAccountNumber = report.accountNumber.toString().trim();
+        const docRef = doc(monthCollectionRef, sanitizedAccountNumber);
         batch.set(docRef, report);
         
         progress.processedRecords++;

@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, query, where, getDocs } from 'firebase/firestore';
+import { collection, writeBatch, doc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedLevied {
@@ -161,55 +161,75 @@ export const uploadDetailedLevied = async (
             recordsByAccount[accountNumber].push(record);
         }
 
-        // Process records by account number
+        // Process records by account number - create one document per account
         const accountNumbers = Object.keys(recordsByAccount);
+        const totalBatches = Math.ceil(accountNumbers.length / MAX_BATCH_SIZE);
         
-        for (let i = 0; i < accountNumbers.length; i++) {
-            const accountNumber = accountNumbers[i];
-            const accountRecords = recordsByAccount[accountNumber];
+        for (let i = 0; i < accountNumbers.length; i += MAX_BATCH_SIZE) {
+            const batch = writeBatch(db);
+            const batchAccountNumbers = accountNumbers.slice(i, i + MAX_BATCH_SIZE);
             
             try {
-                // Process records in batches to avoid transaction too large errors
-                for (let j = 0; j < accountRecords.length; j += MAX_BATCH_SIZE) {
-                    const batch = writeBatch(db);
-                    const batchRecords = accountRecords.slice(j, j + MAX_BATCH_SIZE);
-                    let batchSize = 0;
+                for (const accountNumber of batchAccountNumbers) {
+                    const accountRecords = recordsByAccount[accountNumber];
                     
-                    // Add each record to the batch with its own document
-                    for (const record of batchRecords) {
-                        const recordDoc = doc(monthCollectionRef);
-                        batch.set(recordDoc, {
-                            ...record,
-                            accountNumber, // Add account number for easier querying
-                            uploadDate,    // Add the selected month
-                            uploadedAt: new Date().toISOString()
-                        });
-                        
-                        batchSize++;
+                    // Validate account number before using as document ID
+                    if (!accountNumber || accountNumber.toString().trim() === '') {
+                        console.warn('Skipping record with empty account number:', accountRecords[0]);
+                        failedRecords += accountRecords.length;
+                        continue;
                     }
                     
-                    // Commit this batch
-                    await batch.commit();
-                    processedBatches++;
-                    totalProcessed += batchSize;
+                    const sanitizedAccountNumber = accountNumber.toString().trim();
                     
-                    if (progressCallback) {
-                        progressCallback({
-                            totalRecords,
-                            processedRecords: totalProcessed,
-                            failedRecords,
-                            currentBatch: processedBatches,
-                            totalBatches: Math.ceil(totalRecords / MAX_BATCH_SIZE),
-                            status: 'processing'
-                        });
+                    // Use account number as document ID
+                    const accountDoc = doc(monthCollectionRef, sanitizedAccountNumber);
+                    
+                    // Store the first record's data as the main document (since all records for an account should have the same customer details)
+                    const mainRecord = accountRecords[0];
+                    
+                    // Create the document data without undefined fields
+                    const documentData: any = {
+                        ...mainRecord,
+                        accountNumber: sanitizedAccountNumber,
+                        uploadDate,
+                        uploadedAt: new Date().toISOString()
+                    };
+                    
+                    // Only add records field if there are multiple records
+                    if (accountRecords.length > 1) {
+                        documentData.records = accountRecords;
                     }
                     
-                    // Add a delay between batches
-                    await new Promise(resolve => setTimeout(resolve, 200));
+                    batch.set(accountDoc, documentData);
+                    
+                    totalProcessed += accountRecords.length;
                 }
+                
+                // Commit this batch
+                await batch.commit();
+                processedBatches++;
+                
+                if (progressCallback) {
+                    progressCallback({
+                        totalRecords,
+                        processedRecords: totalProcessed,
+                        failedRecords,
+                        currentBatch: processedBatches,
+                        totalBatches,
+                        status: 'processing'
+                    });
+                }
+                
+                // Add a delay between batches
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
             } catch (error) {
-                console.error(`Error processing account ${accountNumber}:`, error);
-                failedRecords += accountRecords.length;
+                console.error(`Error processing batch ${processedBatches + 1}:`, error);
+                // Count failed records in this batch
+                for (const accountNumber of batchAccountNumbers) {
+                    failedRecords += recordsByAccount[accountNumber].length;
+                }
             }
         }
 
@@ -219,7 +239,7 @@ export const uploadDetailedLevied = async (
                 processedRecords: totalProcessed,
                 failedRecords,
                 currentBatch: processedBatches,
-                totalBatches: Math.ceil(totalRecords / 100), // Use consistent batch size
+                totalBatches: Math.ceil(accountNumbers.length / MAX_BATCH_SIZE),
                 status: 'completed'
             });
         }
@@ -254,7 +274,7 @@ export const uploadDetailedLevied = async (
     }
 };
 
-export const getDetailedLeviedForCustomer = async (accountNumber: string): Promise<AccountDetailsData[]> => {
+export const getDetailedLeviedForCustomer = async (accountNumber: string, year: string = '2024', month: string = '10'): Promise<AccountDetailsData[]> => {
     try {
         // Check if db is initialized
         if (!db) {
@@ -262,72 +282,77 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string): Promi
             return [];
         }
         
+        console.log(`Fetching detailed levied data for account ${accountNumber} in ${year}/${month}`);
+        
         // Initialize result array
         const accountDetails: AccountDetailsData[] = [];
         const currentDate = new Date().toISOString().split('T')[0];
         
-        // For backward compatibility, first check the legacy flat collection
-        const legacyCollection = collection(db, 'detailed_levied');
-        const legacyQuery = query(legacyCollection, where('accountNumber', '==', accountNumber));
-        const legacySnapshot = await getDocs(legacyQuery);
-        
-        if (!legacySnapshot.empty) {
-            console.log(`Found legacy detailed levied data for account number: ${accountNumber}`);
+        // Try to get the document directly using the account number as document ID
+        try {
+            const docRef = doc(db, 'detailed_levied', year, month, accountNumber);
+            const docSnap = await getDoc(docRef);
             
-            // Process legacy data format (with subcollections)
-            for (const docSnapshot of legacySnapshot.docs) {
-                try {
-                    // Get all records from the subcollection of each document
-                    const recordsCollection = collection(docSnapshot.ref, 'records');
-                    const recordsSnapshot = await getDocs(recordsCollection);
-                    
-                    // Process all records from this upload
-                    recordsSnapshot.forEach((recordDoc) => {
-                        const record = recordDoc.data() as DetailedLevied;
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                console.log(`Found detailed levied data for account ${accountNumber}:`, data);
+                
+                // Check if this document has a records array (multiple records)
+                if (data.records && Array.isArray(data.records)) {
+                    // Process each record in the array
+                    data.records.forEach((record: DetailedLevied) => {
                         accountDetails.push({
                             code: record.TARIFF_CODE || 'N/A',
                             description: record.TOS_DESC || 'N/A',
-                            units: '1', // Adding a default units value
+                            units: '1',
                             tariff: record.TOS_DESC || 'N/A',
-                            value: record.M202409 || 0,
+                            value: record.M202410 || 0, // Use October 2024 value
                             date: currentDate
                         });
                     });
-                } catch (error) {
-                    console.error('Error processing legacy detailed levied data:', error);
-                }
-            }
-        }
-        
-        // Now check the new nested year/month collections
-        // Note: In a real implementation, you might want to query specific months based on user selection
-        // For now, we'll just use the current month
-        const now = new Date();
-        const year = now.getFullYear().toString();
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        
-        try {
-            const nestedCollection = collection(db, 'detailed_levied', year, month);
-            const nestedQuery = query(nestedCollection, where('accountNumber', '==', accountNumber));
-            const nestedSnapshot = await getDocs(nestedQuery);
-            
-            if (!nestedSnapshot.empty) {
-                console.log(`Found ${nestedSnapshot.size} detailed levied records in ${year}/${month} for account ${accountNumber}`);
-                
-                nestedSnapshot.forEach((doc) => {
-                    const record = doc.data() as DetailedLevied;
+                } else {
+                    // Process single record document
+                    const record = data as DetailedLevied;
                     accountDetails.push({
                         code: record.TARIFF_CODE || 'N/A',
                         description: record.TOS_DESC || 'N/A',
                         units: '1',
                         tariff: record.TOS_DESC || 'N/A',
-                        value: record.M202409 || 0, // Use the current month's value
+                        value: record.M202410 || 0, // Use October 2024 value
+                        date: currentDate
+                    });
+                }
+            } else {
+                console.log(`No detailed levied data found for account ${accountNumber} in ${year}/${month}`);
+            }
+        } catch (error) {
+            console.error(`Error fetching document for account ${accountNumber}:`, error);
+        }
+        
+        // Fallback: Check legacy collections if no data found in new structure
+        if (accountDetails.length === 0) {
+            console.log('Trying legacy collection as fallback...');
+            
+            // Check legacy flat collection
+            const legacyCollection = collection(db, 'detailed_levied');
+            const legacyQuery = query(legacyCollection, where('ACCOUNT_NO', '==', accountNumber));
+            const legacySnapshot = await getDocs(legacyQuery);
+            
+            if (!legacySnapshot.empty) {
+                console.log(`Found legacy detailed levied data for account number: ${accountNumber}`);
+                
+                legacySnapshot.forEach((docSnapshot) => {
+                    const record = docSnapshot.data() as DetailedLevied;
+                    accountDetails.push({
+                        code: record.TARIFF_CODE || 'N/A',
+                        description: record.TOS_DESC || 'N/A',
+                        units: '1',
+                        tariff: record.TOS_DESC || 'N/A',
+                        value: record.M202410 || 0,
                         date: currentDate
                     });
                 });
             }
-        } catch (error) {
-            console.error(`Error querying nested collection for ${year}/${month}:`, error);
         }
 
         console.log(`Found ${accountDetails.length} detailed levied records for account ${accountNumber}`);

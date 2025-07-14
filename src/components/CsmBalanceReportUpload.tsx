@@ -94,35 +94,71 @@ export default function CsmBalanceReportUpload() {
 
     setIsUploading(true);
     try {
-      // Process the file with the selected month
-      const result = await processCustomerFile(file);
-      if (result.success) {
-        // Convert customer data to balance reports with the selected month
-        const reports = result.data.map((customer: any) => ({
-          ...customer,
-          uploadDate: selectedMonth.value
-        }));
-
-        // Upload the balance reports to Firestore with the selected month
-        await uploadBalanceReports(reports, (progress) => {
-          console.log('Upload progress:', progress);
-          setProgress(progress);
-        });
-
-        await updateUploadTimestamp('csmBalance');
-        const newTimestamp = await getLastUploadTimestamp('csmBalance');
-        setLastUpload(newTimestamp);
-        toast.success(`Successfully uploaded ${reports.length} balance reports for ${selectedMonth.label}`);
-        
-        // Don't reset the month immediately so the success message can display
-        setTimeout(() => {
-          setSelectedMonth(null);
-          setProgress(null);
-        }, 3000); // Reset after 3 seconds
+      // Process the file directly without complex field mapping
+      console.log('Processing file:', file.name, 'Size:', file.size, 'Type:', file.type);
+      
+      // Use a simpler approach - process Excel file directly
+      let rawData: any[] = [];
+      
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Process Excel file directly
+        const XLSX = await import('xlsx');
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        rawData = XLSX.utils.sheet_to_json(worksheet);
       } else {
-        setError(result.message);
-        toast.error(result.message);
+        // Process CSV file
+        const Papa = await import('papaparse');
+        const text = await file.text();
+        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        rawData = result.data;
       }
+      
+      console.log('Raw data from file:', rawData.slice(0, 2));
+      console.log('Available fields:', rawData.length > 0 ? Object.keys(rawData[0]) : []);
+      
+      // Filter out records without account numbers (check multiple possible field names)
+      const validRecords = rawData.filter((record: any) => {
+        const accountNumber = record.ACCOUNT_NO || record['ACCOUNT NO'] || record.ACCOUNT_NUMBER || record.ACC_NO;
+        const hasAccountNumber = accountNumber && accountNumber.toString().trim() !== '';
+        if (!hasAccountNumber) {
+          console.log('Record with missing account number:', record);
+        }
+        return hasAccountNumber;
+      });
+      
+      const skippedCount = rawData.length - validRecords.length;
+      if (skippedCount > 0) {
+        console.warn(`Skipped ${skippedCount} records due to missing account numbers`);
+        toast.error(`Warning: ${skippedCount} records were skipped due to missing account numbers`);
+      }
+      
+      // Convert raw data to balance reports with minimal processing
+      const reports = validRecords.map((record: any) => ({
+        // Use the raw field names and add required fields
+        ...record,
+        accountNumber: record.ACCOUNT_NO || record['ACCOUNT NO'] || record.ACCOUNT_NUMBER || record.ACC_NO,
+        uploadDate: selectedMonth.value,
+        month: selectedMonth.value.split('-')[1],
+        year: selectedMonth.value.split('-')[0],
+        uploadTimestamp: new Date().toISOString()
+      }));
+
+      // Upload the balance reports to Firestore with the selected month
+      await uploadBalanceReports(reports, (progress) => {
+        console.log('Upload progress:', progress);
+        setProgress(progress);
+      });
+
+      await updateUploadTimestamp('csmBalance');
+      const newTimestamp = await getLastUploadTimestamp('csmBalance');
+      setLastUpload(newTimestamp);
+      toast.success(`Successfully uploaded ${reports.length} balance reports for ${selectedMonth.label}`);
+      
+      console.log('Upload completed successfully');
+      setProgress(null);
     } catch (error) {
       const errorMessage = (error as Error).message;
       setError(errorMessage);

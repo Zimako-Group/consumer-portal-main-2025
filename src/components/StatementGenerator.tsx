@@ -13,7 +13,8 @@ import africanBankLogo from '../assets/bank-logos/africanbank-logo.png';
 import yebopayLogo from '../assets/bank-logos/yebopay-logo.png';
 import postOfficeLogo from '../assets/bank-logos/postoffice-logo.png';
 import { getMeterReadingsForCustomer } from '../services/meterReadingService';
-import { getDetailedLeviedForCustomer } from '../services/detailedLeviedService';
+import { getDetailedLeviedForCustomer, AccountDetailsData } from '../services/detailedLeviedService';
+import { getAgingAnalysisForCustomer } from '../services/detailedAgedAnalysisService';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import PaymentGateway from './PaymentGateway';
@@ -56,16 +57,10 @@ interface CustomerData {
     days120: number;
     days150Plus: number;
   };
+  accountDetails?: AccountDetailsData[];
 }
 
-// Interface for account details data used in the statement
-interface AccountDetailsData {
-  code?: string;
-  description?: string;
-  units?: string | number;
-  tariff?: string | number;
-  value?: number;
-}
+// AccountDetailsData interface is now imported from detailedLeviedService
 
 // Helper function to preload images synchronously
 function preloadImage(src: any): Promise<string> {
@@ -138,8 +133,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
     try {
       // Get the account number from either string input or customer object
       const accountNumber = typeof input === 'string' ? input : (input.accountNumber);
+      const year = typeof input === 'object' ? input.year : '2024';
+      const month = typeof input === 'object' ? input.month : '10';
       
-      console.log('Fetching customer details for account:', accountNumber);
+      console.log('Fetching customer details for account:', accountNumber, 'Year:', year, 'Month:', month);
       
       // Get customer document from Firestore
       if (!db) {
@@ -156,7 +153,27 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const data = customerDoc.data();
       console.log('Customer data from Firestore:', data);
 
-      // Return customer data with postal address fields
+      // Fetch account details from detailed_levied collection
+      console.log('Fetching account details from detailed_levied collection...');
+      const accountDetails = await getDetailedLeviedForCustomer(accountNumber, year, month);
+      console.log('Account details fetched:', accountDetails);
+
+      // Fetch aging analysis data from detailed_aged_analysis collection
+      console.log('Fetching aging analysis data from detailed_aged_analysis collection...');
+      console.log('Account number for aging analysis:', accountNumber);
+      const agingAnalysisData = await getAgingAnalysisForCustomer(accountNumber);
+      console.log('Aging analysis data fetched:', agingAnalysisData);
+      console.log('Aging analysis data type:', typeof agingAnalysisData);
+      console.log('Aging analysis data keys:', agingAnalysisData ? Object.keys(agingAnalysisData) : 'null');
+      
+      // Check if we got valid data
+      if (agingAnalysisData && (agingAnalysisData.current > 0 || agingAnalysisData.thirtyDays > 0 || agingAnalysisData.sixtyDays > 0 || agingAnalysisData.ninetyDays > 0 || agingAnalysisData.hundredTwentyPlusDays > 0)) {
+        console.log('✅ Valid aging analysis data found!');
+      } else {
+        console.log('❌ No valid aging analysis data found - all values are 0');
+      }
+
+      // Return customer data with postal address fields, account details, and aging analysis
       return {
         accountHolderName: data.accountHolderName || '',
         accountNumber: accountNumber,
@@ -165,26 +182,35 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         vatRegNumber: data.vatRegNumber || '',
         outstandingBalance: data.outstandingBalance || 0,
         outstandingTotalBalance: data.outstandingTotalBalance || 0,
-        aging120Days: data.aging120Days || 0,
-        aging90Days: data.aging90Days || 0,
-        aging60Days: data.aging60Days || 0,
-        aging30Days: data.aging30Days || 0,
-        agingCurrent: data.agingCurrent || 0,
-        closingBalance: data.closingBalance || 0,
+        aging120Days: agingAnalysisData?.hundredTwentyPlusDays || data.aging120Days || 0,
+        aging90Days: agingAnalysisData?.ninetyDays || data.aging90Days || 0,
+        aging60Days: agingAnalysisData?.sixtyDays || data.aging60Days || 0,
+        aging30Days: agingAnalysisData?.thirtyDays || data.aging30Days || 0,
+        agingCurrent: agingAnalysisData?.current || data.agingCurrent || 0,
+        closingBalance: agingAnalysisData?.closingBalance || data.closingBalance || 0,
         postalAddress1: data.postalAddress1 || '',
         postalAddress2: data.postalAddress2 || '',
         postalAddress3: data.postalAddress3 || '',
         postalCode: data.postalCode || '',
         propertyCategory: data.propertyCategory || '',
         valuation: data.valuation || 0,  // Added valuation field
-        agingAnalysis: data.agingAnalysis || {
+        agingAnalysis: agingAnalysisData ? {
+          current: agingAnalysisData.current,
+          days30: agingAnalysisData.thirtyDays,
+          days60: agingAnalysisData.sixtyDays,
+          days90: agingAnalysisData.ninetyDays,
+          days120: agingAnalysisData.hundredTwentyPlusDays,
+          days150Plus: 0 // Not available in new structure
+        } : (data.agingAnalysis || {
           current: 0,
           days30: 0,
           days60: 0,
           days90: 0,
           days120: 0,
           days150Plus: 0
-        }
+        }),
+        // Add account details to the customer data
+        accountDetails: accountDetails
       };
     } catch (error) {
       console.error('Error fetching customer details:', error);
@@ -192,35 +218,35 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
     }
   };
 
-  fetchAgedAnalysis = async (customerNumber: string) => {
+  fetchAgedAnalysis = async (customerNumber: string, year: string = '2024', month: string = '10') => {
     try {
-      if (!db) {
-        console.error('Firestore database is not initialized');
-        return null;
-      }
-      const docRef = doc(db, 'detailed_aged_analysis', customerNumber);
-      const docSnap = await getDoc(docRef);
+      console.log(`Fetching aged analysis for account ${customerNumber} in ${year}/${month}`);
       
-      if (docSnap.exists()) {
-        const data = docSnap.data();
+      // Use the service function to get aging analysis data
+      const agingData = await getAgingAnalysisForCustomer(customerNumber);
+      
+      if (agingData) {
+        console.log('Aging analysis data fetched:', agingData);
         return {
-          current: data.totals.current.toFixed(2),
-          days30: data.totals.days30.toFixed(2),
-          days60: data.totals.days60.toFixed(2),
-          days90: data.totals.days90.toFixed(2),
-          days120: data.totals.days120.toFixed(2),
-          days150: data.totals.days150.toFixed(2),
-          days180: data.totals.days180.toFixed(2),
-          days210: data.totals.days210.toFixed(2),
-          days240: data.totals.days240.toFixed(2),
-          days270: data.totals.days270.toFixed(2),
-          days300: data.totals.days300.toFixed(2),
-          days330: data.totals.days330.toFixed(2),
-          days360: data.totals.days360.toFixed(2),
-          days390Plus: data.totals.days390Plus.toFixed(2),
-          details: data.details // In case you need the detailed breakdown
+          current: agingData.current.toFixed(2),
+          days30: agingData.thirtyDays.toFixed(2),
+          days60: agingData.sixtyDays.toFixed(2),
+          days90: agingData.ninetyDays.toFixed(2),
+          days120: agingData.hundredTwentyPlusDays.toFixed(2),
+          days150: '0.00', // Not available in new structure
+          days180: '0.00', // Not available in new structure
+          days210: '0.00', // Not available in new structure
+          days240: '0.00', // Not available in new structure
+          days270: '0.00', // Not available in new structure
+          days300: '0.00', // Not available in new structure
+          days330: '0.00', // Not available in new structure
+          days360: '0.00', // Not available in new structure
+          days390Plus: '0.00', // Not available in new structure
+          closingBalance: agingData.closingBalance.toFixed(2)
         };
       }
+      
+      console.log(`No aging analysis data found for account ${customerNumber}`);
       return null;
     } catch (error) {
       console.error('Error fetching aged analysis:', error);
@@ -623,23 +649,29 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       doc.autoTable(accountTableOptions);
       currentY = (doc as any).lastAutoTable.finalY + 2;
 
-      // Configure aging analysis table
-      const agedAnalysis = await this.fetchAgedAnalysis(customerData.accountNumber);
-      const closingBalance = await this.fetchCustomerBalance(customerData.accountNumber);
+      // Use the aging analysis data already fetched in customerData
+      console.log('\n=== PDF GENERATION AGING ANALYSIS DEBUG ===');
+      console.log('customerData.agingAnalysis:', customerData.agingAnalysis);
+      console.log('customerData.aging120Days:', customerData.aging120Days);
+      console.log('customerData.aging90Days:', customerData.aging90Days);
+      console.log('customerData.aging60Days:', customerData.aging60Days);
+      console.log('customerData.aging30Days:', customerData.aging30Days);
+      console.log('customerData.agingCurrent:', customerData.agingCurrent);
+      console.log('customerData.closingBalance:', customerData.closingBalance);
+      
+      const agedAnalysis = customerData.agingAnalysis;
+      const closingBalance = customerData.closingBalance;
 
-      // Calculate the total for 120+ days (sum of all aging periods from 120 days and above)
-      const days120Plus = agedAnalysis ? (
-        parseFloat(agedAnalysis.days120 || '0') +
-        parseFloat(agedAnalysis.days150 || '0') +
-        parseFloat(agedAnalysis.days180 || '0') +
-        parseFloat(agedAnalysis.days210 || '0') +
-        parseFloat(agedAnalysis.days240 || '0') +
-        parseFloat(agedAnalysis.days270 || '0') +
-        parseFloat(agedAnalysis.days300 || '0') +
-        parseFloat(agedAnalysis.days330 || '0') +
-        parseFloat(agedAnalysis.days360 || '0') +
-        parseFloat(agedAnalysis.days390Plus || '0')
-      ).toFixed(2) : '0.00';
+      // Use the aging data directly from customerData (already formatted)
+      const days120Plus = agedAnalysis?.days120?.toFixed(2) || customerData.aging120Days?.toFixed(2) || '0.00';
+      const days90 = agedAnalysis?.days90?.toFixed(2) || customerData.aging90Days?.toFixed(2) || '0.00';
+      const days60 = agedAnalysis?.days60?.toFixed(2) || customerData.aging60Days?.toFixed(2) || '0.00';
+      const days30 = agedAnalysis?.days30?.toFixed(2) || customerData.aging30Days?.toFixed(2) || '0.00';
+      const current = agedAnalysis?.current?.toFixed(2) || customerData.agingCurrent?.toFixed(2) || '0.00';
+      const closingBalanceFormatted = closingBalance?.toFixed(2) || '0.00';
+      
+      console.log('Final aging analysis values for PDF:', { days120Plus, days90, days60, days30, current, closingBalanceFormatted });
+      console.log('=== END AGING ANALYSIS DEBUG ===\n');
 
       // Configure aging analysis table
       const agingTableOptions = {
@@ -647,11 +679,11 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         head: [['120+ DAYS', '90 DAYS', '60 DAYS', '30 DAYS', 'CURRENT', 'CLOSING BALANCE']],
         body: [[
           { content: `R ${days120Plus}`, styles: { cellPadding: 1 } },
-          { content: `R ${agedAnalysis?.days90 || 0}`, styles: { cellPadding: 1 } },
-          { content: `R ${agedAnalysis?.days60 || 0}`, styles: { cellPadding: 1 } },
-          { content: `R ${agedAnalysis?.days30 || 0}`, styles: { cellPadding: 1 } },
-          { content: `R ${agedAnalysis?.current || 0}`, styles: { cellPadding: 1 } },
-          { content: `R ${closingBalance}`, styles: { cellPadding: 1 } }
+          { content: `R ${days90}`, styles: { cellPadding: 1 } },
+          { content: `R ${days60}`, styles: { cellPadding: 1 } },
+          { content: `R ${days30}`, styles: { cellPadding: 1 } },
+          { content: `R ${current}`, styles: { cellPadding: 1 } },
+          { content: `R ${closingBalanceFormatted}`, styles: { cellPadding: 1 } }
         ]],
         theme: 'grid',
         styles: {

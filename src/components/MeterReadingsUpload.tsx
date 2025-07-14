@@ -107,7 +107,7 @@ const MeterReadingsUpload: React.FC = () => {
       // Validate required fields in first row
       const firstRow = jsonData[0] as any;
       const requiredFields = [
-        'Period', 'AccountNo', 'MeterNumber', 'PrevRead', 'CurrRead',
+        'AccountNo', 'MeterNumber', 'PrevRead', 'CurrRead',
         'Consumption', 'TotLevied'
       ];
 
@@ -125,7 +125,6 @@ const MeterReadingsUpload: React.FC = () => {
 
           const reading = {
             uploadDate: selectedMonth.value,
-            Period: row.Period?.toString() || '',
             AccountNo: row.AccountNo?.toString() || '',
             AccountHolder: row.AccountHolder?.toString() || '',
             ErfNo: row.ErfNo?.toString() || '',

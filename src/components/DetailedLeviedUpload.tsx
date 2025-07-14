@@ -101,6 +101,7 @@ const DetailedLeviedUpload: React.FC = () => {
         try {
             const dateMatch = selectedMonth.value.match(/^(\d{4})-(\d{2})$/);
             if (!dateMatch) {
+                console.log('Date format validation failed for:', selectedMonth.value);
                 setIsMonthValid(false);
                 return;
             }
@@ -109,12 +110,12 @@ const DetailedLeviedUpload: React.FC = () => {
             const yearNum = parseInt(year);
             const monthNum = parseInt(month);
             
-            setIsMonthValid(
-                yearNum >= 2024 && 
-                monthNum >= 1 && 
-                monthNum <= 12
-            );
+            const isValid = yearNum >= 2024 && monthNum >= 1 && monthNum <= 12;
+            console.log('Month validation:', { selectedMonth: selectedMonth.value, yearNum, monthNum, isValid });
+            
+            setIsMonthValid(isValid);
         } catch (error) {
+            console.error('Error validating month:', error);
             setIsMonthValid(false);
         }
     }, [selectedMonth]);
@@ -143,7 +144,13 @@ const DetailedLeviedUpload: React.FC = () => {
 
     const processFile = async (fileContent: string | ArrayBuffer, fileName: string) => {
         try {
-            if (!selectedMonth || !isMonthValid) {
+            console.log('processFile validation:', { selectedMonth, isMonthValid });
+            
+            if (!selectedMonth) {
+                throw new Error('Please select a month before uploading');
+            }
+            
+            if (!isMonthValid) {
                 throw new Error('Please select a valid month before uploading');
             }
             
@@ -300,7 +307,14 @@ const DetailedLeviedUpload: React.FC = () => {
     const onDrop = useCallback(async (acceptedFiles: File[]) => {
         if (acceptedFiles.length === 0) return;
         
-        if (!selectedMonth || !isMonthValid) {
+        console.log('onDrop validation:', { selectedMonth, isMonthValid });
+        
+        if (!selectedMonth) {
+            setUploadStatus('Please select a month before uploading');
+            return;
+        }
+        
+        if (!isMonthValid) {
             setUploadStatus('Please select a valid month before uploading');
             return;
         }
@@ -330,7 +344,7 @@ const DetailedLeviedUpload: React.FC = () => {
         } else {
             reader.readAsArrayBuffer(file);
         }
-    }, []);
+    }, [selectedMonth, isMonthValid]);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,

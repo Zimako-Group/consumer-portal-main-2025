@@ -194,8 +194,30 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                 return 0;
             };
             
+            // Debug: Log the first few records to see what's being parsed
+            console.log('Sample raw records:', data.slice(0, 3));
+            console.log('Available columns:', Object.keys(data[0] || {}));
+            
+            // Debug: Check account numbers specifically
+            const accountNumbers = data.map(record => record.ACCOUNT_NO);
+            console.log('All account numbers:', accountNumbers);
+            console.log('Unique account numbers:', [...new Set(accountNumbers)]);
+            console.log('Empty account numbers count:', accountNumbers.filter(acc => !acc || acc.toString().trim() === '').length);
+            
+            // Filter out records with empty account numbers before processing
+            const validRecords = data.filter(record => {
+                const accountNo = record.ACCOUNT_NO?.toString().trim();
+                return accountNo && accountNo !== '' && accountNo !== 'undefined' && accountNo !== 'null';
+            });
+            
+            console.log(`Filtered from ${data.length} to ${validRecords.length} records with valid account numbers`);
+            
+            if (validRecords.length === 0) {
+                throw new Error('No records found with valid account numbers. Please check that the ACCOUNT_NO column contains valid data.');
+            }
+            
             // Transform data to match the DetailedAgedAnalysis interface expected by the service
-            const transformedRecords: ServiceDetailedAgedAnalysis[] = data.map(record => {
+            const transformedRecords: ServiceDetailedAgedAnalysis[] = validRecords.map((record) => {
                 // Calculate the 120+ days factor by summing all periods >= 120 days
                 const days120Plus = processAmount(record['120 Days']) + 
                                   processAmount(record['150 Days']) + 
@@ -209,7 +231,7 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                                   processAmount(record['390 + Days']);
                 
                 return {
-                    ACCOUNT_NO: Number(record.ACCOUNT_NO) || 0,
+                    ACCOUNT_NO: record.ACCOUNT_NO?.toString() || '',
                     '120 DAY FACTOR': days120Plus,
                     '90 DAY FACTOR': processAmount(record['90 Days']),
                     '60 DAY FACTOR': processAmount(record['60 Days']),

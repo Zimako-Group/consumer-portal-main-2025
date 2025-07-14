@@ -225,6 +225,7 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
 
     // Helper function to get value from row with alternative column names
     const getValueFromRow = (row: any, primaryKey: string, alternativeKeys: string[] = []): any => {
+      // First try the primary key
       if (row[primaryKey] !== undefined) {
         return parseValue(row[primaryKey]);
       }
@@ -236,13 +237,29 @@ export const processCustomerFile = async (file: File): Promise<{ success: boolea
         }
       }
       
+      // If not found, try case-insensitive matching
+      const allKeys = [primaryKey, ...alternativeKeys];
+      const rowKeys = Object.keys(row);
+      
+      for (const searchKey of allKeys) {
+        const foundKey = rowKeys.find(key => key.toUpperCase() === searchKey.toUpperCase());
+        if (foundKey && row[foundKey] !== undefined) {
+          return parseValue(row[foundKey]);
+        }
+      }
+      
       return 'N/A';
     };
     
     for (const row of parseResult.data) {
-      const rawAccountNumber = getValueFromRow(row, 'ACCOUNT NO', ['ACCOUNT NUMBER', 'ACC NO']);
+      console.log('Processing row with keys:', Object.keys(row));
+      console.log('Raw row data:', row);
+      
+      const rawAccountNumber = getValueFromRow(row, 'ACCOUNT NO', ['ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT_NO']);
+      console.log('Extracted rawAccountNumber:', rawAccountNumber);
+      
       if (!rawAccountNumber || rawAccountNumber === 'N/A') {
-        console.warn(`Skipping row: Missing account number`);
+        console.warn(`Skipping row: Missing account number. Raw value:`, rawAccountNumber);
         continue;
       }
 
