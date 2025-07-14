@@ -15,6 +15,7 @@ import postOfficeLogo from '../assets/bank-logos/postoffice-logo.png';
 import { getMeterReadingsForCustomer } from '../services/meterReadingService';
 import { getDetailedLeviedForCustomer, AccountDetailsData } from '../services/detailedLeviedService';
 import { getAgingAnalysisForCustomer } from '../services/detailedAgedAnalysisService';
+import { getBalanceReportForCustomer } from '../services/balanceReportService';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import PaymentGateway from './PaymentGateway';
@@ -173,6 +174,31 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         console.log('❌ No valid aging analysis data found - all values are 0');
       }
 
+      // Fetch balance report data for closing balance
+      console.log('Fetching balance report data for closing balance...');
+      console.log('Account number for balance report lookup:', accountNumber);
+      console.log('Account number type:', typeof accountNumber);
+      const balanceReportDate = `${year}-${month.padStart(2, '0')}`;
+      console.log('Balance report date:', balanceReportDate);
+      console.log('Looking for document at path: balanceReports/' + year + '/' + month.padStart(2, '0') + '/' + accountNumber);
+      const balanceReportData = await getBalanceReportForCustomer(accountNumber, balanceReportDate);
+      console.log('Balance report data fetched:', balanceReportData);
+      console.log('Available fields in balance report:', balanceReportData ? Object.keys(balanceReportData) : 'No data');
+      
+      // Extract closing balance from balance report
+      // Handle both camelCase and uppercase field names
+      const balanceReportAny = balanceReportData as any;
+      const closingBalanceFromReport = balanceReportData?.outstandingTotalBalance || 
+                                      balanceReportAny?.['OUTSTANDING TOTAL BALANCE'] || 
+                                      balanceReportAny?.['OUTSTANDING_TOTAL_BALANCE'] || 0;
+      console.log('Closing balance from balance report (outstandingTotalBalance):', balanceReportData?.outstandingTotalBalance);
+      console.log('Closing balance from balance report (OUTSTANDING TOTAL BALANCE):', balanceReportAny?.['OUTSTANDING TOTAL BALANCE']);
+      console.log('Final closing balance from report:', closingBalanceFromReport);
+      
+      // Use balance report closing balance or fallback to aging analysis
+      const finalClosingBalance = closingBalanceFromReport > 0 ? closingBalanceFromReport : (agingAnalysisData?.closingBalance || 0);
+      console.log('Final closing balance to use:', finalClosingBalance);
+
       // Return customer data with postal address fields, account details, and aging analysis
       return {
         accountHolderName: data.accountHolderName || '',
@@ -187,7 +213,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         aging60Days: agingAnalysisData?.sixtyDays || data.aging60Days || 0,
         aging30Days: agingAnalysisData?.thirtyDays || data.aging30Days || 0,
         agingCurrent: agingAnalysisData?.current || data.agingCurrent || 0,
-        closingBalance: agingAnalysisData?.closingBalance || data.closingBalance || 0,
+        closingBalance: finalClosingBalance,
         postalAddress1: data.postalAddress1 || '',
         postalAddress2: data.postalAddress2 || '',
         postalAddress3: data.postalAddress3 || '',
@@ -623,11 +649,14 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('30 Days:', aging30);
       console.log('Calculated Opening Balance:', calculatedOpeningBalance);
       console.log('Original Outstanding Balance:', customerData.outstandingBalance);
+      console.log('Total Outstanding Balance:', customerData.outstandingTotalBalance);
       console.log('=== END OPENING BALANCE CALCULATION ===\n');
       
-      // Use calculated opening balance or fallback to original values
-      const openingBalance = calculatedOpeningBalance > 0 ? calculatedOpeningBalance : 
-                           (customerData.outstandingBalance || customerData.outstandingTotalBalance || 0);
+      // Always use the calculated opening balance from aging analysis totals
+      // Do not fall back to total outstanding balance to avoid confusion
+      const openingBalance = calculatedOpeningBalance;
+      
+      console.log('Final Opening Balance used:', openingBalance);
 
       // Configure account details table with real data
       const accountTableOptions = {
@@ -680,7 +709,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('customerData.aging60Days:', customerData.aging60Days);
       console.log('customerData.aging30Days:', customerData.aging30Days);
       console.log('customerData.agingCurrent:', customerData.agingCurrent);
-      console.log('customerData.closingBalance:', customerData.closingBalance);
+      console.log('customerData.closingBalance (from balance reports):', customerData.closingBalance);
       
       const agingAnalysisData = customerData.agingAnalysis;
       const closingBalance = customerData.closingBalance;
