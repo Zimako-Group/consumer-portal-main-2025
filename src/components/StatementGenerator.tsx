@@ -606,6 +606,29 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Update currentY for the table
       currentY += 7;
 
+      // Calculate opening balance from aging analysis totals
+      const agedAnalysis = customerData.agingAnalysis;
+      const aging120Plus = agedAnalysis?.days120 || customerData.aging120Days || 0;
+      const aging90 = agedAnalysis?.days90 || customerData.aging90Days || 0;
+      const aging60 = agedAnalysis?.days60 || customerData.aging60Days || 0;
+      const aging30 = agedAnalysis?.days30 || customerData.aging30Days || 0;
+      
+      // Sum up all aging totals for opening balance
+      const calculatedOpeningBalance = aging120Plus + aging90 + aging60 + aging30;
+      
+      console.log('\n=== OPENING BALANCE CALCULATION ===');
+      console.log('120+ Days:', aging120Plus);
+      console.log('90 Days:', aging90);
+      console.log('60 Days:', aging60);
+      console.log('30 Days:', aging30);
+      console.log('Calculated Opening Balance:', calculatedOpeningBalance);
+      console.log('Original Outstanding Balance:', customerData.outstandingBalance);
+      console.log('=== END OPENING BALANCE CALCULATION ===\n');
+      
+      // Use calculated opening balance or fallback to original values
+      const openingBalance = calculatedOpeningBalance > 0 ? calculatedOpeningBalance : 
+                           (customerData.outstandingBalance || customerData.outstandingTotalBalance || 0);
+
       // Configure account details table with real data
       const accountTableOptions = {
         startY: currentY,
@@ -616,7 +639,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
            { content: 'OPENING BALANCE', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
-           { content: `R ${customerData.outstandingBalance?.toFixed(2) || customerData.outstandingTotalBalance?.toFixed(2) || '0.00'}`, styles: { cellPadding: 0.3, halign: 'left' } }],
+           { content: `R ${openingBalance.toFixed(2)}`, styles: { cellPadding: 0.3, halign: 'left' } }],
           ...(await getDetailedLeviedForCustomer(accountNumber)).map(item => [
             { content: '2024-10-31', styles: { cellPadding: 0.3 } },
             { content: item.code || '', styles: { cellPadding: 0.3 } },
@@ -659,15 +682,15 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('customerData.agingCurrent:', customerData.agingCurrent);
       console.log('customerData.closingBalance:', customerData.closingBalance);
       
-      const agedAnalysis = customerData.agingAnalysis;
+      const agingAnalysisData = customerData.agingAnalysis;
       const closingBalance = customerData.closingBalance;
 
       // Use the aging data directly from customerData (already formatted)
-      const days120Plus = agedAnalysis?.days120?.toFixed(2) || customerData.aging120Days?.toFixed(2) || '0.00';
-      const days90 = agedAnalysis?.days90?.toFixed(2) || customerData.aging90Days?.toFixed(2) || '0.00';
-      const days60 = agedAnalysis?.days60?.toFixed(2) || customerData.aging60Days?.toFixed(2) || '0.00';
-      const days30 = agedAnalysis?.days30?.toFixed(2) || customerData.aging30Days?.toFixed(2) || '0.00';
-      const current = agedAnalysis?.current?.toFixed(2) || customerData.agingCurrent?.toFixed(2) || '0.00';
+      const days120Plus = agingAnalysisData?.days120?.toFixed(2) || customerData.aging120Days?.toFixed(2) || '0.00';
+      const days90 = agingAnalysisData?.days90?.toFixed(2) || customerData.aging90Days?.toFixed(2) || '0.00';
+      const days60 = agingAnalysisData?.days60?.toFixed(2) || customerData.aging60Days?.toFixed(2) || '0.00';
+      const days30 = agingAnalysisData?.days30?.toFixed(2) || customerData.aging30Days?.toFixed(2) || '0.00';
+      const current = agingAnalysisData?.current?.toFixed(2) || customerData.agingCurrent?.toFixed(2) || '0.00';
       const closingBalanceFormatted = closingBalance?.toFixed(2) || '0.00';
       
       console.log('Final aging analysis values for PDF:', { days120Plus, days90, days60, days30, current, closingBalanceFormatted });

@@ -260,9 +260,73 @@ const DetailedLeviedUpload: React.FC = () => {
                 throw new Error('No valid records found after filtering empty rows');
             }
 
-            // Process the data and upload
+            console.log(`Found ${records.length} records before aggregation`);
+            
+            // Aggregate records by account number - sum values for duplicate accounts
+            const aggregatedRecords = new Map<string, DetailedLevied>();
+            
+            records.forEach((record, index) => {
+                const accountNumber = record.ACCOUNT_NO;
+                console.log(`Processing record ${index + 1}: Account ${accountNumber}`);
+                
+                if (aggregatedRecords.has(accountNumber)) {
+                    // Account already exists, aggregate the values
+                    const existingRecord = aggregatedRecords.get(accountNumber)!;
+                    console.log(`Aggregating values for account ${accountNumber}`);
+                    
+                    // Sum all monthly values
+                    existingRecord.M202409 += Number(record.M202409) || 0;
+                    existingRecord.M202410 += Number(record.M202410) || 0;
+                    existingRecord.M202411 += Number(record.M202411) || 0;
+                    existingRecord.M202412 += Number(record.M202412) || 0;
+                    existingRecord.M202501 += Number(record.M202501) || 0;
+                    existingRecord.M202502 += Number(record.M202502) || 0;
+                    existingRecord.M202503 += Number(record.M202503) || 0;
+                    existingRecord.M202504 += Number(record.M202504) || 0;
+                    existingRecord.M202505 += Number(record.M202505) || 0;
+                    existingRecord.M202506 += Number(record.M202506) || 0;
+                    existingRecord.M202507 += Number(record.M202507) || 0;
+                    existingRecord.M202508 += Number(record.M202508) || 0;
+                    existingRecord.TOTAL += Number(record.TOTAL) || 0;
+                    
+                    // Update the aggregated record
+                    aggregatedRecords.set(accountNumber, existingRecord);
+                } else {
+                    // First occurrence of this account, add it to the map
+                    aggregatedRecords.set(accountNumber, {
+                        ...record,
+                        // Ensure all values are numbers
+                        M202409: Number(record.M202409) || 0,
+                        M202410: Number(record.M202410) || 0,
+                        M202411: Number(record.M202411) || 0,
+                        M202412: Number(record.M202412) || 0,
+                        M202501: Number(record.M202501) || 0,
+                        M202502: Number(record.M202502) || 0,
+                        M202503: Number(record.M202503) || 0,
+                        M202504: Number(record.M202504) || 0,
+                        M202505: Number(record.M202505) || 0,
+                        M202506: Number(record.M202506) || 0,
+                        M202507: Number(record.M202507) || 0,
+                        M202508: Number(record.M202508) || 0,
+                        TOTAL: Number(record.TOTAL) || 0,
+                    });
+                }
+            });
+            
+            // Convert map back to array
+            const finalRecords = Array.from(aggregatedRecords.values());
+            console.log(`Aggregated to ${finalRecords.length} unique accounts`);
+            
+            // Log aggregation summary
+            const duplicateAccounts = records.length - finalRecords.length;
+            if (duplicateAccounts > 0) {
+                console.log(`✅ Aggregated ${duplicateAccounts} duplicate account entries`);
+                setUploadStatus(`Aggregated ${records.length} records into ${finalRecords.length} unique accounts`);
+            }
+
+            // Process the aggregated data and upload
             const result = await uploadDetailedLevied(
-                records.map(record => ({
+                finalRecords.map(record => ({
                     ...record,
                     // Convert string values to numbers
                     M202409: Number(record.M202409) || 0,
