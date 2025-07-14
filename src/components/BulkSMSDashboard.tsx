@@ -24,7 +24,7 @@ const BulkSMSDashboard: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
 
   // Default template message
-  const defaultTemplate = 'Dear Mohokare customer, your municipal statement is available for download. Click here to download and settle your account https://consumerportal.co.za/quick-statement or visit: https://consumerportal.co.za to manage your account going forward.';
+  const defaultTemplate = 'Dear Mohokare customer, your municipal statement is available for download. Click here to download and settle your account https://consumerportal.co.za/statement or visit: https://consumerportal.co.za to manage your account going forward.';
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
