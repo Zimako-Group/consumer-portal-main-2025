@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedLevied {
@@ -274,7 +274,7 @@ export const uploadDetailedLevied = async (
     }
 };
 
-export const getDetailedLeviedForCustomer = async (accountNumber: string, year: string = '2024', month: string = '10'): Promise<AccountDetailsData[]> => {
+export const getDetailedLeviedForCustomer = async (accountNumber: string, year: string, month: string): Promise<AccountDetailsData[]> => {
     try {
         // Check if db is initialized
         if (!db) {
@@ -306,7 +306,7 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string, year: 
                             description: record.TOS_DESC || 'N/A',
                             units: '1',
                             tariff: record.TOS_DESC || 'N/A',
-                            value: record.M202410 || 0, // Use October 2024 value
+                            value: getDynamicMonthValue(record, year, month) || 0, // Use value for selected month/year
                             date: currentDate
                         });
                     });
@@ -329,36 +329,39 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string, year: 
             console.error(`Error fetching document for account ${accountNumber}:`, error);
         }
         
-        // Fallback: Check legacy collections if no data found in new structure
+        // Do NOT fall back to legacy collections - we want to strictly use data for the selected month/year
         if (accountDetails.length === 0) {
-            console.log('Trying legacy collection as fallback...');
-            
-            // Check legacy flat collection
-            const legacyCollection = collection(db, 'detailed_levied');
-            const legacyQuery = query(legacyCollection, where('ACCOUNT_NO', '==', accountNumber));
-            const legacySnapshot = await getDocs(legacyQuery);
-            
-            if (!legacySnapshot.empty) {
-                console.log(`Found legacy detailed levied data for account number: ${accountNumber}`);
-                
-                legacySnapshot.forEach((docSnapshot) => {
-                    const record = docSnapshot.data() as DetailedLevied;
-                    accountDetails.push({
-                        code: record.TARIFF_CODE || 'N/A',
-                        description: record.TOS_DESC || 'N/A',
-                        units: '1',
-                        tariff: record.TOS_DESC || 'N/A',
-                        value: record.M202410 || 0,
-                        date: currentDate
-                    });
-                });
-            }
+            console.log(`No detailed levied data found for account ${accountNumber} in ${year}/${month} - NOT falling back to legacy collection`);
         }
-
         console.log(`Found ${accountDetails.length} detailed levied records for account ${accountNumber}`);
         return accountDetails;
     } catch (error) {
         console.error('Error fetching detailed levied data:', error);
         return [];
     }
+};
+
+/**
+ * Helper function to get the value for a specific month/year from a DetailedLevied record
+ * @param record The DetailedLevied record
+ * @param year The year (e.g., '2024')
+ * @param month The month (e.g., '10')
+ * @returns The value for the specified month/year or 0 if not found
+ */
+const getDynamicMonthValue = (record: DetailedLevied, year: string, month: string): number => {
+    // Format the month field name (e.g., M202410 for October 2024)
+    const monthFieldName = `M${year}${month.padStart(2, '0')}`;
+    
+    // Log the field name we're looking for
+    console.log(`Looking for field ${monthFieldName} in record:`, Object.keys(record));
+    
+    // Check if the field exists in the record
+    if (monthFieldName in record) {
+        const value = (record as any)[monthFieldName] || 0;
+        console.log(`Found value ${value} for ${monthFieldName}`);
+        return value;
+    }
+    
+    console.log(`Field ${monthFieldName} not found in record, returning 0`);
+    return 0;
 };

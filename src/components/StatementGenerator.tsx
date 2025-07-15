@@ -134,8 +134,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
     try {
       // Get the account number from either string input or customer object
       const accountNumber = typeof input === 'string' ? input : (input.accountNumber);
-      const year = typeof input === 'object' ? input.year : '2024';
-      const month = typeof input === 'object' ? input.month : '10';
+      // Always use the provided month and year from input if available, otherwise use current date
+      const currentDate = new Date();
+      const year = typeof input === 'object' ? input.year : currentDate.getFullYear().toString();
+      const month = typeof input === 'object' ? input.month : (currentDate.getMonth() + 1).toString().padStart(2, '0');
       
       console.log('Fetching customer details for account:', accountNumber, 'Year:', year, 'Month:', month);
       
@@ -156,13 +158,14 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
 
       // Fetch account details from detailed_levied collection
       console.log('Fetching account details from detailed_levied collection...');
+      console.log(`Using year: ${year}, month: ${month} for detailed levied data`);
       const accountDetails = await getDetailedLeviedForCustomer(accountNumber, year, month);
       console.log('Account details fetched:', accountDetails);
 
       // Fetch aging analysis data from detailed_aged_analysis collection
       console.log('Fetching aging analysis data from detailed_aged_analysis collection...');
-      console.log('Account number for aging analysis:', accountNumber);
-      const agingAnalysisData = await getAgingAnalysisForCustomer(accountNumber);
+      console.log(`Account number for aging analysis: ${accountNumber}, Year: ${year}, Month: ${month}`);
+      const agingAnalysisData = await getAgingAnalysisForCustomer(accountNumber, year, month);
       console.log('Aging analysis data fetched:', agingAnalysisData);
       console.log('Aging analysis data type:', typeof agingAnalysisData);
       console.log('Aging analysis data keys:', agingAnalysisData ? Object.keys(agingAnalysisData) : 'null');
@@ -178,9 +181,11 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log('Fetching balance report data for closing balance...');
       console.log('Account number for balance report lookup:', accountNumber);
       console.log('Account number type:', typeof accountNumber);
-      const balanceReportDate = `${year}-${month.padStart(2, '0')}`;
+      // Ensure month is properly padded with leading zero if needed
+      const paddedMonth = month.padStart(2, '0');
+      const balanceReportDate = `${year}-${paddedMonth}`;
       console.log('Balance report date:', balanceReportDate);
-      console.log('Looking for document at path: balanceReports/' + year + '/' + month.padStart(2, '0') + '/' + accountNumber);
+      console.log(`Looking for document at path: balanceReports/${year}/${paddedMonth}/${accountNumber}`);
       const balanceReportData = await getBalanceReportForCustomer(accountNumber, balanceReportDate);
       console.log('Balance report data fetched:', balanceReportData);
       console.log('Available fields in balance report:', balanceReportData ? Object.keys(balanceReportData) : 'No data');
@@ -189,14 +194,16 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Handle both camelCase and uppercase field names
       const balanceReportAny = balanceReportData as any;
       const closingBalanceFromReport = balanceReportData?.outstandingTotalBalance || 
-                                      balanceReportAny?.['OUTSTANDING TOTAL BALANCE'] || 
-                                      balanceReportAny?.['OUTSTANDING_TOTAL_BALANCE'] || 0;
+                                     balanceReportAny?.['OUTSTANDING TOTAL BALANCE'] || 
+                                     balanceReportAny?.['OUTSTANDING_TOTAL_BALANCE'] || 0;
       console.log('Closing balance from balance report (outstandingTotalBalance):', balanceReportData?.outstandingTotalBalance);
       console.log('Closing balance from balance report (OUTSTANDING TOTAL BALANCE):', balanceReportAny?.['OUTSTANDING TOTAL BALANCE']);
       console.log('Final closing balance from report:', closingBalanceFromReport);
       
-      // Use balance report closing balance or fallback to aging analysis
-      const finalClosingBalance = closingBalanceFromReport > 0 ? closingBalanceFromReport : (agingAnalysisData?.closingBalance || 0);
+      // If no balance report data is found for the selected month/year, do NOT fall back to another month
+      // Instead, just use the aging analysis data or show zero
+      const finalClosingBalance = balanceReportData ? closingBalanceFromReport : (agingAnalysisData?.closingBalance || 0);
+      console.log(`Using ${balanceReportData ? 'balance report data' : 'aging analysis data'} for closing balance`);
       console.log('Final closing balance to use:', finalClosingBalance);
 
       // Return customer data with postal address fields, account details, and aging analysis
@@ -249,7 +256,7 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       console.log(`Fetching aged analysis for account ${customerNumber} in ${year}/${month}`);
       
       // Use the service function to get aging analysis data
-      const agingData = await getAgingAnalysisForCustomer(customerNumber);
+      const agingData = await getAgingAnalysisForCustomer(customerNumber, year, month);
       
       if (agingData) {
         console.log('Aging analysis data fetched:', agingData);
@@ -323,18 +330,32 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Continue with generation even if preloading fails
     }
     try {
+      console.log('Generating statement for input:', input);
+      
+      // Log the period being used for statement generation
+      if (typeof input === 'object') {
+        console.log(`Generating statement for period: Year ${input.year}, Month ${input.month}`);
+      }
+      
       // Get the account number from either string input or customer object
       const accountNumber = typeof input === 'string' ? input : (input.accountNumber);
+      
+      // Always use the provided month and year from input if available, otherwise use current date
+      const currentDate = new Date();
+      const year = typeof input === 'object' ? input.year : currentDate.getFullYear().toString();
+      const month = typeof input === 'object' ? input.month : (currentDate.getMonth() + 1).toString().padStart(2, '0');
+      
+      console.log('Using year:', year, 'month:', month, 'for statement generation');
 
       if (!accountNumber) {
         throw new Error('Account number is required');
       }
 
-      // Fetch customer details from Firestore
-      const customerData = await this.fetchCustomerDetails(accountNumber);
-      
+      // Fetch customer details
+      const customerData = await this.fetchCustomerDetails(input);
       if (!customerData) {
-        throw new Error(`Customer details not found for account number: ${accountNumber}`);
+        console.error('Failed to fetch customer details');
+        return;
       }
 
       // Create new jsPDF instance
@@ -663,14 +684,14 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         startY: currentY,
         head: [['DATE', 'CODE', 'DESCRIPTION', 'UNITS', 'TARIFF', 'VALUE']],
         body: [
-          [{ content: '2024-10-31', styles: { cellPadding: 0.3 } }, 
+          [{ content: `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`, styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: 'OPENING BALANCE', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: '', styles: { cellPadding: 0.3 } }, 
            { content: `R ${openingBalance.toFixed(2)}`, styles: { cellPadding: 0.3, halign: 'left' } }],
-          ...(await getDetailedLeviedForCustomer(accountNumber)).map(item => [
-            { content: '2024-10-31', styles: { cellPadding: 0.3 } },
+          ...(await getDetailedLeviedForCustomer(accountNumber, year, month)).map(item => [
+            { content: `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`, styles: { cellPadding: 0.3 } },
             { content: item.code || '', styles: { cellPadding: 0.3 } },
             { content: item.description || '', styles: { cellPadding: 0.3 } },
             { content: item.units?.toString() || '', styles: { cellPadding: 0.3 } },

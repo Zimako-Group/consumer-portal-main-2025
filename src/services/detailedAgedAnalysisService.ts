@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedAgedAnalysis {
@@ -195,7 +195,7 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
     }
 };
 
-export const getAgingAnalysisForCustomer = async (accountNumber: string): Promise<AgingAnalysisData> => {
+export const getAgingAnalysisForCustomer = async (accountNumber: string, year: string, month: string): Promise<AgingAnalysisData> => {
     try {
         // Check if db is initialized
         if (!db) {
@@ -224,16 +224,16 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
         
         let foundData = false;
         
-        // First, try to get data directly from 2024/10 (most likely location)
+        // Try to get data from the specified year/month
         try {
-            console.log('Trying to fetch directly from detailed_aged_analysis/2024/10/');
-            const docRef = doc(db, 'detailed_aged_analysis', '2024', '10', accountNumber);
+            console.log(`Trying to fetch directly from detailed_aged_analysis/${year}/${month}/`);
+            const docRef = doc(db, 'detailed_aged_analysis', year, month, accountNumber);
             const docSnap = await getDoc(docRef);
             
             if (docSnap.exists()) {
                 foundData = true;
                 const data = docSnap.data();
-                console.log(`Found aging data for 2024-10:`, data);
+                console.log(`Found aging data for ${year}-${month}:`, data);
                 
                 // Check if this document has a records array (multiple records)
                 if (data.records && Array.isArray(data.records)) {
@@ -243,7 +243,9 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
                         agingData.ninetyDays += Number(record['90 DAY FACTOR']) || 0;
                         agingData.sixtyDays += Number(record['60 DAY FACTOR']) || 0;
                         agingData.thirtyDays += Number(record['UP TO 30 DAY FACTOR']) || 0;
-                        agingData.current += Number(record['202407']) || 0;  // Current month
+                        // Get the current month value dynamically
+                        const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                        agingData.current += Number((record as any)[currentMonthField]) || 0;  // Current month
                     });
                 } else {
                     // Process single record document
@@ -254,10 +256,10 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
                     agingData.current += Number(data['202407']) || 0;  // Current month
                 }
             } else {
-                console.log('No data found in detailed_aged_analysis/2024/10/');
+                console.log(`No data found in detailed_aged_analysis/${year}/${month}/`);
             }
         } catch (error) {
-            console.error('Error fetching from detailed_aged_analysis/2024/10/:', error);
+            console.error(`Error fetching from detailed_aged_analysis/${year}/${month}/:`, error);
         }
         
         // If no data found in 2024/10, try searching other years/months
@@ -310,7 +312,9 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
                                 agingData.ninetyDays += Number(record['90 DAY FACTOR']) || 0;
                                 agingData.sixtyDays += Number(record['60 DAY FACTOR']) || 0;
                                 agingData.thirtyDays += Number(record['UP TO 30 DAY FACTOR']) || 0;
-                                agingData.current += Number(record['202407']) || 0;  // Current month
+                                // Get the current month value dynamically
+                                const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                                agingData.current += Number((record as any)[currentMonthField]) || 0;  // Current month
                             });
                         } else {
                             // Process single record document
@@ -318,7 +322,9 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
                             agingData.ninetyDays += Number(data['90 DAY FACTOR']) || 0;
                             agingData.sixtyDays += Number(data['60 DAY FACTOR']) || 0;
                             agingData.thirtyDays += Number(data['UP TO 30 DAY FACTOR']) || 0;
-                            agingData.current += Number(data['202407']) || 0;  // Current month
+                            // Get the current month value dynamically
+                            const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                            agingData.current += Number((data as any)[currentMonthField]) || 0;  // Current month
                         }
                         
                         // If we found data for this account, we can stop searching
@@ -332,29 +338,11 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string): Promis
             }
         }
         
-        // Fallback: If no data found in the new structure, try the legacy collection
+        // Do NOT fall back to legacy collections - we want to strictly use data for the selected month/year
         if (!foundData) {
-            const legacyCollection = collection(db, 'detailed_aged_analysis');
-            // Try both string and number formats for backward compatibility
-            const legacyQuery = query(legacyCollection, where('ACCOUNT_NO', '==', accountNumber));
-            const legacySnapshot = await getDocs(legacyQuery);
-            
-            if (!legacySnapshot.empty) {
-                foundData = true;
-                legacySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    console.log('Found legacy aging data:', data);
-
-                    // Read the exact fields from the database
-                    agingData.hundredTwentyPlusDays += Number(data['120 DAY FACTOR']) || 0;
-                    agingData.ninetyDays += Number(data['90 DAY FACTOR']) || 0;
-                    agingData.sixtyDays += Number(data['60 DAY FACTOR']) || 0;
-                    agingData.thirtyDays += Number(data['UP TO 30 DAY FACTOR']) || 0;
-                    agingData.current += Number(data['202407']) || 0;  // Current month
-                });
-            }
+            console.log(`No aging data found for account ${accountNumber} in ${year}/${month} - NOT falling back to legacy collection`);
         }
-        
+
         // Calculate closing balance as sum of all periods
         agingData.closingBalance = 
             agingData.hundredTwentyPlusDays +

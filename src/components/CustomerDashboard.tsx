@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, Firestore } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { CustomerData as BaseCustomerData } from '../services/customerService';
+import PeriodSelectionModal from './PeriodSelectionModal';
 
 // Extended CustomerData interface to include properties from different data sources
 interface CustomerData extends BaseCustomerData {
@@ -12,7 +13,17 @@ import CustomerDetailsModalContainer from './CustomerDetailsModal';
 import ReportModal from './ReportModal';
 import { Toaster } from 'react-hot-toast';
 import { exportToCSV } from '../utils/exportUtils';
-import { generateCustomerReport, generateChartConfigs, ReportMetrics, ChartConfigs } from '../services/reportService';
+import { generateCustomerReport, generateChartConfigs, ReportMetrics as BaseReportMetrics, ChartConfigs as BaseChartConfigs } from '../services/reportService';
+
+// Extended interfaces to include properties used in the PDF export
+interface ReportMetrics extends BaseReportMetrics {
+  topCustomers: Array<CustomerData>;
+}
+
+interface ChartConfigs extends BaseChartConfigs {
+  statusDistribution?: boolean;
+  balanceDistribution?: boolean;
+}
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -49,8 +60,9 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportMetrics, setReportMetrics] = useState<ReportMetrics | null>(null);
   const [chartConfigs, setChartConfigs] = useState<ChartConfigs | null>(null);
-  const [isExportingReport, setIsExportingReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false);
+  const [statementCustomer, setStatementCustomer] = useState<CustomerData | null>(null);
   const [loadingStates, setLoadingStates] = useState({
     table: false,
     export: false,
@@ -66,11 +78,17 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     try {
       setLoading(true);
       // Fetch basic customer data
-      const customersQuery = query(collection(db, 'customers'), orderBy(selectedFilter));
+      if (!db) {
+        console.error('Firestore database is not initialized');
+        setError('Database connection error');
+        return;
+      }
+    
+      const customersQuery = query(collection(db as Firestore, 'customers'), orderBy(selectedFilter));
       const snapshot = await getDocs(customersQuery);
       
       // Fetch balance data from the balances collection if it exists
-      const balancesQuery = query(collection(db, 'customer_balances'));
+      const balancesQuery = query(collection(db as Firestore, 'customer_balances'));
       const balancesSnapshot = await getDocs(balancesQuery);
       
       // Create a map of account numbers to balance data
@@ -147,8 +165,15 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     setError(null);
     try {
       setLoading(true);
+      if (!db) {
+        console.error('Firestore database is not initialized');
+        setError('Database connection error');
+        setLoadingState('table', false);
+        return;
+      }
+      
       const customersQuery = query(
-        collection(db, 'customers'),
+        collection(db as Firestore, 'customers'),
         orderBy(selectedFilter)
       );
 
@@ -310,140 +335,183 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   };
 
   const handleGenerateReport = () => {
-    const metrics = generateCustomerReport(allCustomers);
-    const configs = generateChartConfigs(metrics);
+    const baseMetrics = generateCustomerReport(allCustomers);
+    
+    // Create extended report metrics with top customers
+    const metrics: ReportMetrics = {
+      ...baseMetrics,
+      topCustomers: allCustomers
+        .sort((a, b) => (b.outstandingTotalBalance || b.outstandingBalance || 0) - 
+                       (a.outstandingTotalBalance || a.outstandingBalance || 0))
+        .slice(0, 10)
+    };
+    
+    // Create extended chart configs
+    const baseConfigs = generateChartConfigs(baseMetrics);
+    const configs: ChartConfigs = {
+      ...baseConfigs,
+      statusDistribution: true,
+      balanceDistribution: true
+    };
+    
     setReportMetrics(metrics);
     setChartConfigs(configs);
     setIsReportModalOpen(true);
   };
 
   const exportReportToPDF = async () => {
-    if (!reportMetrics || !chartConfigs) {
-      toast.error('Report data is not available');
-      return;
-    }
-  
+    if (!reportMetrics) return;
+
     setLoadingState('report', true);
     try {
+      // Create a new jsPDF instance
       const doc = new jsPDF();
-      
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+      let currentY = margin.top;
+
       // Helper functions
-      const formatNumber = (value: number | undefined | null): string => 
-        new Intl.NumberFormat('en-ZA').format(Number(value || 0));
-      
-      const formatCurrency = (value: number | undefined | null): string => 
-        new Intl.NumberFormat('en-ZA', {
-          style: 'currency',
-          currency: 'ZAR',
-          minimumFractionDigits: 2
-        }).format(Number(value || 0));
-  
-      // Header
-      doc.setFillColor(41, 128, 185); // Professional blue
-      doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('Customer Analytics Report', 20, 25);
-      
-      // Subtitle with date
-      doc.setFontSize(12);
-      doc.text(`Generated on ${new Date().toLocaleDateString('en-ZA')}`, 20, 35);
-      
-      // Reset text color
-      doc.setTextColor(0, 0, 0);
-  
-      // Executive Summary
-      doc.setFontSize(16);
-      doc.text('Executive Summary', 20, 55);
+      const formatNumber = (value: number | undefined | null): string => {
+        if (value === undefined || value === null) return '0';
+        return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      };
+
+      const formatCurrency = (value: number | undefined | null): string => {
+        if (value === undefined || value === null) return 'R 0.00';
+        return `R ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+      };
+
+      // Add title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Customer Report', pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+
+      // Add date
       doc.setFontSize(10);
-      const summaryText = `This report provides a comprehensive analysis of ${formatNumber(reportMetrics.totalCustomers)} customers, ` +
-        `with ${formatNumber(reportMetrics.activeCustomers)} active accounts and a total outstanding balance of ${formatCurrency(reportMetrics.totalOutstandingBalance)}.`;
-      doc.text(doc.splitTextToSize(summaryText, 170), 20, 65);
-  
-      // Key Metrics Section
-      doc.setFontSize(14);
-      doc.text('Key Performance Indicators', 20, 85);
-  
-      // Create a grid layout for KPIs
-      const kpiData = [
-        [
-          { title: 'Total Customers', value: formatNumber(reportMetrics.totalCustomers) },
-          { title: 'Active Customers', value: formatNumber(reportMetrics.activeCustomers) },
-          { title: 'Inactive Customers', value: formatNumber(reportMetrics.inactiveCustomers) }
-        ],
-        [
-          { title: 'Total Outstanding', value: formatCurrency(reportMetrics.totalOutstandingBalance) },
-          { title: 'Average Outstanding', value: formatCurrency(reportMetrics.averageOutstandingBalance) },
-          { title: 'Collection Rate', value: `${((reportMetrics.recentPaymentStats?.totalPayments || 0) / (reportMetrics.totalOutstandingBalance || 1) * 100).toFixed(1)}%` }
-        ]
-      ];
-  
-      // KPI Grid
-      let yPos = 95;
-      kpiData.forEach((row, rowIndex) => {
-        row.forEach((kpi, colIndex) => {
-          const xPos = 20 + (colIndex * 60);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, currentY, { align: 'center' });
+      currentY += 15;
+
+      // Add summary metrics
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Summary Metrics', margin.left, currentY);
+      currentY += 8;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Total Customers: ${formatNumber(reportMetrics.totalCustomers)}`, margin.left, currentY);
+      currentY += 6;
+      doc.text(`Active Customers: ${formatNumber(reportMetrics.activeCustomers)}`, margin.left, currentY);
+      currentY += 6;
+      doc.text(`Inactive Customers: ${formatNumber(reportMetrics.inactiveCustomers)}`, margin.left, currentY);
+      currentY += 6;
+      doc.text(`Total Outstanding Balance: ${formatCurrency(reportMetrics.totalOutstandingBalance)}`, margin.left, currentY);
+      currentY += 6;
+      doc.text(`Average Outstanding Balance: ${formatCurrency(reportMetrics.averageOutstandingBalance)}`, margin.left, currentY);
+      currentY += 15;
+
+      // Add charts as images if available
+      if (chartConfigs) {
+        // Status Distribution Chart
+        if (chartConfigs.statusDistribution) {
           doc.setFontSize(12);
-          doc.setTextColor(100, 100, 100);
-          doc.text(kpi.title, xPos, yPos);
-          doc.setFontSize(14);
-          doc.setTextColor(0, 0, 0);
-          doc.text(kpi.value, xPos, yPos + 7);
-        });
-        yPos += 25;
-      });
-  
-      // Payment Statistics
-      doc.setFontSize(14);
-      doc.text('Payment Analysis', 20, yPos + 10);
-  
-      const paymentStats = [
-        ['Metric', 'Value', 'Trend'],
-        ['Total Payments', formatCurrency(reportMetrics.recentPaymentStats?.totalPayments), '↑'],
-        ['Average Payment', formatCurrency(reportMetrics.recentPaymentStats?.averagePayment), '→'],
-        ['Customers with Payments', formatNumber(reportMetrics.recentPaymentStats?.customersWithPayments), '↑']
-      ];
-  
-      (doc as any).autoTable({
-        startY: yPos + 15,
-        head: [paymentStats[0]],
-        body: paymentStats.slice(1),
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 10 }
-      });
-  
-      // Outstanding Balance Distribution
-      doc.setFontSize(14);
-      doc.text('Outstanding Balance Distribution', 20, (doc as any).lastAutoTable.finalY + 15);
-  
-      if (Array.isArray(reportMetrics.outstandingBalanceRanges)) {
-        const balanceData = reportMetrics.outstandingBalanceRanges.map(range => [
-          range.range || 'N/A',
-          formatNumber(range.count),
-          formatCurrency(range.totalAmount),
-          `${((range.count / (reportMetrics.totalCustomers || 1)) * 100).toFixed(1)}%`
-        ]);
-  
-        (doc as any).autoTable({
-          startY: (doc as any).lastAutoTable.finalY + 20,
-          head: [['Range', 'Customers', 'Total Amount', 'Distribution']],
-          body: balanceData,
-          theme: 'grid',
-          headStyles: { fillColor: [41, 128, 185] },
-          styles: { fontSize: 10 }
-        });
+          doc.setFont('helvetica', 'bold');
+          doc.text('Customer Status Distribution', margin.left, currentY);
+          currentY += 8;
+
+          const chartImg = document.getElementById('status-chart') as HTMLCanvasElement;
+          if (chartImg) {
+            const imgData = chartImg.toDataURL('image/png');
+            const imgWidth = 80;
+            const imgHeight = 60;
+            doc.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, currentY, imgWidth, imgHeight);
+            currentY += imgHeight + 10;
+          }
+        }
+
+        // Balance Distribution Chart
+        if (chartConfigs.balanceDistribution && currentY + 80 <= pageHeight - margin.bottom) {
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Outstanding Balance Distribution', margin.left, currentY);
+          currentY += 8;
+
+          const chartImg = document.getElementById('balance-chart') as HTMLCanvasElement;
+          if (chartImg) {
+            const imgData = chartImg.toDataURL('image/png');
+            const imgWidth = 80;
+            const imgHeight = 60;
+            doc.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, currentY, imgWidth, imgHeight);
+            currentY += imgHeight + 10;
+          }
+        } else if (chartConfigs.balanceDistribution) {
+          // Add new page if not enough space
+          doc.addPage();
+          currentY = margin.top;
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Outstanding Balance Distribution', margin.left, currentY);
+          currentY += 8;
+
+          const chartImg = document.getElementById('balance-chart') as HTMLCanvasElement;
+          if (chartImg) {
+            const imgData = chartImg.toDataURL('image/png');
+            const imgWidth = 80;
+            const imgHeight = 60;
+            doc.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, currentY, imgWidth, imgHeight);
+            currentY += imgHeight + 10;
+          }
+        }
       }
-  
-      // Footer
-      const pageCount = doc.internal.getNumberOfPages();
-      doc.setFontSize(8);
-      for (let i = 1; i <= pageCount; i++) {
+
+      // Add top customers table if there's enough space, otherwise add a new page
+      if (reportMetrics.topCustomers.length > 0) {
+        if (currentY + 60 > pageHeight - margin.bottom) {
+          doc.addPage();
+          currentY = margin.top;
+        }
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Top Customers by Outstanding Balance', margin.left, currentY);
+        currentY += 8;
+
+        // Create table
+        const tableColumn = ['Account Number', 'Account Holder', 'Outstanding Balance'];
+        const tableRows = reportMetrics.topCustomers.map((customer: CustomerData) => [
+          customer.accountNumber,
+          customer.accountHolderName,
+          formatCurrency(customer.outstandingTotalBalance || customer.outstandingBalance)
+        ]);
+
+        doc.autoTable({
+          head: [tableColumn],
+          body: tableRows,
+          startY: currentY,
+          margin: { left: margin.left, right: margin.right },
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+          alternateRowStyles: { fillColor: [240, 240, 240] }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // Add footer with page numbers
+      // Use internal.pages.length instead of getNumberOfPages()
+      const totalPages = doc.internal.pages.length - 1; // -1 because pages array is 1-indexed
+      for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
         doc.text(
-          `Page ${i} of ${pageCount} | Confidential Document`,
-          doc.internal.pageSize.width / 2,
-          doc.internal.pageSize.height - 10,
+          `Page ${i} of ${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 10,
           { align: 'center' }
         );
       }
@@ -463,25 +531,32 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     }
   };
 
-  const handleDownloadStatement = async (customer: CustomerData, e: React.MouseEvent) => {
+  const handleDownloadStatement = (customer: CustomerData, e: React.MouseEvent) => {
     e.stopPropagation();
-    setLoadingState('statement', new Set([...loadingStates.statement, customer.accountNumber]));
+    setStatementCustomer(customer);
+    setIsPeriodModalOpen(true);
+  };
+
+  const handleGenerateStatementForPeriod = async (year: string, month: string) => {
+    if (!statementCustomer) return;
+    
+    setIsPeriodModalOpen(false);
+    setLoadingState('statement', new Set([...loadingStates.statement, statementCustomer.accountNumber]));
+    
     try {
-      // Create a CustomerInput object with the required properties
-      const currentDate = new Date();
       const customerInput = {
-        accountNumber: customer.accountNumber,
-        month: currentDate.getMonth() + 1 + '', // Convert to string (1-12)
-        year: currentDate.getFullYear() + '' // Convert to string
+        accountNumber: statementCustomer.accountNumber,
+        month,
+        year
       };
       await generateStatement(customerInput);
-      toast.success('Statement downloaded successfully');
+      toast.success(`Statement for ${new Date(parseInt(year), parseInt(month)-1).toLocaleDateString('en-US', {year: 'numeric', month: 'long'})} downloaded successfully`);
     } catch (error) {
       console.error('Error downloading statement:', error);
       toast.error('Failed to download statement');
     } finally {
       const newSet = new Set(loadingStates.statement);
-      newSet.delete(customer.accountNumber);
+      newSet.delete(statementCustomer.accountNumber);
       setLoadingState('statement', newSet);
     }
   };
@@ -539,23 +614,28 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           </span>
         </div>
         <div className="p-4 flex justify-center">
-          <button
-            className={`transition-colors duration-200 ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white disabled:text-gray-600'
-                : 'text-gray-600 hover:text-blue-600 disabled:text-gray-400'
-            }`}
-            title="Download Statement"
-            onClick={(e) => handleDownloadStatement(customer, e)}
-            disabled={loadingStates.statement.has(customer.accountNumber)}
-          >
-            {loadingStates.statement.has(customer.accountNumber) 
-              ? <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${
-                  isDarkMode ? 'border-gray-400' : 'border-gray-600'
-                }`} />
-              : <Download className="w-5 h-5" />
-            }
-          </button>
+          <div>
+            <button
+              className={`flex items-center transition-colors duration-200 ${
+                isDarkMode
+                  ? 'text-gray-400 hover:text-white disabled:text-gray-600'
+                  : 'text-gray-600 hover:text-blue-600 disabled:text-gray-400'
+              }`}
+              title="Download Statement"
+              onClick={(e) => handleDownloadStatement(customer, e)}
+              disabled={loadingStates.statement.has(customer.accountNumber)}
+            >
+              {loadingStates.statement.has(customer.accountNumber) 
+                ? <div className={`animate-spin rounded-full h-5 w-5 border-b-2 ${
+                    isDarkMode ? 'border-gray-400' : 'border-gray-600'
+                  }`} />
+                : <>
+                  <Download className="w-5 h-5" />
+                  <span className="sr-only">Download Statement</span>
+                </>
+              }
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -884,6 +964,14 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           />
         )}
       </div>
+
+      {/* Period Selection Modal */}
+      <PeriodSelectionModal
+        isOpen={isPeriodModalOpen}
+        onClose={() => setIsPeriodModalOpen(false)}
+        onPeriodSelect={handleGenerateStatementForPeriod}
+        accountNumber={statementCustomer?.accountNumber || ''}
+      />
     </div>
   );
 };
