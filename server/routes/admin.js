@@ -4,7 +4,7 @@ const { requireAdmin } = require('../middleware/auth');
 const fs = require('fs').promises;
 const path = require('path');
 const dotenv = require('dotenv');
-const { WhatsAppService } = require('../../src/services/whatsapp/whatsappService');
+// const { WhatsAppService } = require('../../src/services/whatsapp/whatsappService'); // Commented out due to missing TypeScript service
 
 // Middleware to ensure only admins can access these routes
 router.use(requireAdmin);

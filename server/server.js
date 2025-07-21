@@ -4,9 +4,10 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccount.json');
 const path = require('path');
+const { Resend } = require('resend');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Configure CORS
 app.use(cors({
@@ -26,27 +27,162 @@ admin.initializeApp({
 
 const bucket = admin.storage().bucket();
 
+// Initialize Resend
+const resend = new Resend(process.env.VITE_RESEND_API_KEY);
+
 // Import routes
 const adminUsersRouter = require('./routes/adminUsers');
 const communicationsRouter = require('./routes/communications');
-const whatsappRouter = require('./routes/whatsapp');
-const whatsappMessagesRouter = require('./routes/whatsappMessages');
+// const whatsappRouter = require('./routes/whatsapp'); // Commented out due to missing TypeScript service
+// const whatsappMessagesRouter = require('./routes/whatsappMessages'); // Commented out due to missing TypeScript service
 const adminRouter = require('./routes/admin');
 
 // Use routes
 app.use('/api', adminUsersRouter);
 app.use('/api', communicationsRouter);
-app.use('/api/whatsapp', whatsappRouter);
-app.use('/api/whatsapp', whatsappMessagesRouter);
+// app.use('/api/whatsapp', whatsappRouter); // Commented out due to missing TypeScript service
+// app.use('/api/whatsapp', whatsappMessagesRouter); // Commented out due to missing TypeScript service
 app.use('/api/admin', adminRouter);
 
 // WhatsApp routes
-app.use('/api/whatsapp', require('./routes/whatsapp'));
+// app.use('/api/whatsapp', require('./routes/whatsapp')); // Commented out due to missing TypeScript service
 
 // Test endpoint
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Server is running!' });
 });
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Email API server is running' });
+});
+
+// Send emails endpoint
+app.post('/api/send-emails', async (req, res) => {
+  try {
+    const { recipients, subject, content, templateType } = req.body;
+
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Recipients array is required and must not be empty'
+      });
+    }
+
+    if (!subject || !content) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject and content are required'
+      });
+    }
+
+    const results = [];
+    let successful = 0;
+    let failed = 0;
+
+    // Process emails in batches to avoid rate limiting
+    const batchSize = 10;
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize);
+      
+      const batchPromises = batch.map(async (recipient) => {
+        try {
+          // Personalize content
+          const personalizedContent = personalizeEmailContent(content, recipient.name, recipient.accountNumber);
+          const personalizedSubject = personalizeEmailSubject(subject, recipient.name, recipient.accountNumber);
+          
+          // Convert to HTML
+          const htmlContent = convertTextToHtml(personalizedContent);
+          
+          // Send email
+          const response = await resend.emails.send({
+            from: 'Zimako <noreply@consumerportal.co.za>', // Using verified domain
+            to: recipient.email,
+            subject: personalizedSubject,
+            html: htmlContent,
+          });
+
+          if (response.error) {
+            failed++;
+            return {
+              email: recipient.email,
+              success: false,
+              error: response.error.message || 'Failed to send email'
+            };
+          }
+
+          successful++;
+          return {
+            email: recipient.email,
+            success: true,
+            messageId: response.data?.id
+          };
+        } catch (error) {
+          failed++;
+          return {
+            email: recipient.email,
+            success: false,
+            error: error.message || 'Unknown error occurred'
+          };
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+
+      // Add delay between batches
+      if (i + batchSize < recipients.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    res.json({
+      success: successful > 0,
+      message: `Processed ${recipients.length} emails. ${successful} successful, ${failed} failed.`,
+      totalSent: recipients.length,
+      successful,
+      failed,
+      results
+    });
+
+  } catch (error) {
+    console.error('Error sending emails:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Helper functions for email personalization
+function personalizeEmailContent(content, customerName, accountNumber) {
+  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  
+  return content
+    .replace(/{{customerName}}/g, customerName)
+    .replace(/{{accountNumber}}/g, accountNumber)
+    .replace(/{{currentMonth}}/g, currentMonth)
+    .replace(/{{outstandingAmount}}/g, 'R 0.00'); // Placeholder
+}
+
+function personalizeEmailSubject(subject, customerName, accountNumber) {
+  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  
+  return subject
+    .replace(/{{customerName}}/g, customerName)
+    .replace(/{{accountNumber}}/g, accountNumber)
+    .replace(/{{currentMonth}}/g, currentMonth);
+}
+
+function convertTextToHtml(text) {
+  return text
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/^(.*)/, '<p>$1')
+    .replace(/(.*$)/, '$1</p>')
+    .replace(/https?:\/\/[^\s]+/g, '<a href="$&" style="color: #2563eb; text-decoration: underline;">$&</a>');
+}
 
 // Model structure endpoint
 app.get('/api/model/structure', async (req, res) => {
@@ -220,6 +356,8 @@ app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log('Available endpoints:');
   console.log('- GET /api/test');
+  console.log('- GET /health');
+  console.log('- POST /api/send-emails');
   console.log('- GET /api/model/structure');
   console.log('- GET /api/model/weights');
   console.log('- GET /api/model/metadata');

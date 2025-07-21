@@ -10,24 +10,23 @@ import {
   ChevronDown,
   Palette,
   FileText,
-  Plus,
   History,
   Users,
-  FileSpreadsheet,
   MessageSquare,
   HelpCircleIcon,
   Activity,
   UserPlus,
   Settings,
-  Send
+  Send,
+  Mail
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
-  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard') => void;
-  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard';
+  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard') => void;
+  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard';
 }
 
 interface NavItem {
@@ -41,7 +40,7 @@ interface NavItem {
 const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange }) => {
   const { isDarkMode, toggleTheme, themeColor, setThemeColor } = useTheme();
   const { currentUser, userData } = useAuth();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const [notifications] = useState(3);
   const [activeItem, setActiveItem] = useState('Home');
 
@@ -62,20 +61,7 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange })
       href: '#',
       action: () => onViewChange('reports')
     },
-    { 
-      name: 'Statements', 
-      icon: <FileSpreadsheet className="w-5 h-5" />, 
-      href: '#',
-      items: [
-        { name: 'New Statements', icon: <Plus className="w-5 h-5" />, href: '/accounts/new-statements' },
-        { 
-          name: 'View Statements', 
-          icon: <FileText className="w-5 h-5" />, 
-          href: '#',
-          action: () => onViewChange('viewStatements')
-        }
-      ]
-    },
+
     { 
       name: 'Payment Reminders', 
       icon: <Bell className="w-5 h-5" />, 
@@ -105,6 +91,12 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange })
       icon: <Send className="w-5 h-5" />, 
       href: '#',
       action: () => onViewChange('bulk-sms-dashboard')
+    },
+    { 
+      name: 'Bulk Email Dashboard', 
+      icon: <Mail className="w-5 h-5" />, 
+      href: '#',
+      action: () => onViewChange('bulk-email-dashboard')
     },
     {
       name: 'Users',

@@ -5,7 +5,7 @@ import ChangeLog from './ChangeLog';
 import CustomerDashboard from './CustomerDashboard';
 import QueryManagement from './QueryManagement';
 import CreateAdminUser from './CreateAdminUser';
-import ViewStatements from './ViewStatements';
+
 import SuperPaymentReminder from './SuperPaymentReminder';
 import StatsCard from './StatsCard';
 import FeatureCard from './FeatureCard';
@@ -14,6 +14,7 @@ import ActiveUsersCard from './analytics/ActiveUsersCard';
 import AdminMeterReadings from './AdminMeterReadings';
 import WhatsAppDashboard from './WhatsAppDashboard';
 import BulkSMSDashboard from './BulkSMSDashboard';
+import BulkEmailDashboard from './BulkEmailDashboard';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebaseConfig';
@@ -43,7 +44,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     console.log('User Data:', userData);
   }, [currentUser, userData]);
 
-  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'viewStatements' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
@@ -450,8 +451,6 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               <div className="p-8">
                 <CreateAdminUser onClose={() => setCurrentView('dashboard')} />
               </div>
-            ) : currentView === 'viewStatements' ? (
-              <ViewStatements />
             ) : currentView === 'payment-reminder' ? (
               <SuperPaymentReminder />
             ) : currentView === 'meter-readings' ? (
@@ -462,6 +461,8 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               <WhatsAppDashboard />
             ) : currentView === 'bulk-sms-dashboard' ? (
               <BulkSMSDashboard />
+            ) : currentView === 'bulk-email-dashboard' ? (
+              <BulkEmailDashboard />
             ) : (
               // Dashboard View with new greeting and stats cards
               <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">

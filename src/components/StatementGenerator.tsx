@@ -552,8 +552,10 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       doc.text(customerData.postalCode?.toString() || '', margin.left + 23, currentY + 12);
 
       // Generate tax invoice number (YYYY/MM/AccountNumber)
-      const statementDate = '2024-10-31'; // Fixed date for all statements
-      const taxInvoiceNo = `2024/10/${customerData.accountNumber}`;
+      // Calculate the last day of the selected month
+      const lastDayOfMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+      const statementDate = `${year}-${month.padStart(2, '0')}-${lastDayOfMonth}`; // Dynamic date based on selected month/year
+      const taxInvoiceNo = `${year}/${month}/${customerData.accountNumber}`;
 
       // Right column values (position maintained)
       const rightX = pageWidth / 2;
