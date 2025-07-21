@@ -141,16 +141,15 @@ const QuickStatementDownload: React.FC = () => {
       
       toast.loading('Generating your PDF statement...', { id: 'pdf-generation' });
       
-      // Get current month and year for statement generation
-      const currentDate = new Date();
-      const currentMonth = (currentDate.getMonth() + 1).toString().padStart(2, '0');
-      const currentYear = currentDate.getFullYear().toString();
+      // Generate statements for October 2024
+      const statementMonth = '10'; // October
+      const statementYear = '2024';
       
       // Create customer input object for StatementGenerator
       const customerInput = {
         accountNumber: customer.accountNumber,
-        month: currentMonth,
-        year: currentYear
+        month: statementMonth,
+        year: statementYear
       };
       
       console.log('📅 Generating statement for:', customerInput);
