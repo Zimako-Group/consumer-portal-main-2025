@@ -847,11 +847,17 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
         doc.text(value, valueX, y + 3);
       };
 
+      // Calculate due date based on statement period (last day of the statement month)
+      const statementYear = parseInt(year);
+      const statementMonth = parseInt(month);
+      const lastDayOfStatementMonth = new Date(statementYear, statementMonth, 0).getDate();
+      const dueDate = `${year}-${month.padStart(2, '0')}-${lastDayOfStatementMonth.toString().padStart(2, '0')}`;
+      
       // Draw remittance advice details
       drawDetailRow(leftColumnX, currentY + 4, 'ACCOUNT NUMBER:', customerData.accountNumber || '');
       drawDetailRow(leftColumnX, currentY + 8, 'CONSUMER NAME:', customerData.accountHolderName || '');
       drawDetailRow(leftColumnX, currentY + 12, 'TOTAL DUE:', `R ${closingBalanceFormatted}`);
-      drawDetailRow(leftColumnX, currentY + 16, 'TOTAL DUE ON OR BEFORE:', '2024-09-31');
+      drawDetailRow(leftColumnX, currentY + 16, 'TOTAL DUE ON OR BEFORE:', dueDate);
 
       // Draw banking details with consistent alignment
       const drawBankingDetailRow = (x: number, y: number, label: string, value: string) => {

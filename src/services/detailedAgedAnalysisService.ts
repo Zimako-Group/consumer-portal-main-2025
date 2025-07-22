@@ -210,7 +210,13 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
             };
         }
         
-        console.log('Fetching aging analysis for account:', accountNumber);
+        console.log('=== AGING ANALYSIS FETCH START ===');
+        console.log('Account Number:', accountNumber);
+        console.log('Account Number Type:', typeof accountNumber);
+        console.log('Year:', year, 'Month:', month);
+        
+        // Normalize account number - trim and convert to string
+        const normalizedAccountNumber = String(accountNumber).trim();
         
         // Initialize aging data
         let agingData: AgingAnalysisData = {
@@ -224,16 +230,41 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
         
         let foundData = false;
         
-        // Try to get data from the specified year/month
+        // Try multiple account number variations to handle different storage formats
+        const accountVariations = [
+            normalizedAccountNumber,
+            accountNumber, // Original as passed
+            String(accountNumber).trim(),
+            accountNumber.toString().trim()
+        ].filter((acc, index, arr) => arr.indexOf(acc) === index); // Remove duplicates
+        
+        console.log('Account number variations to try:', accountVariations);
+        
+        // First, let's see what documents exist in the target collection
         try {
-            console.log(`Trying to fetch directly from detailed_aged_analysis/${year}/${month}/`);
-            const docRef = doc(db, 'detailed_aged_analysis', year, month, accountNumber);
-            const docSnap = await getDoc(docRef);
-            
-            if (docSnap.exists()) {
-                foundData = true;
-                const data = docSnap.data();
-                console.log(`Found aging data for ${year}-${month}:`, data);
+            const monthCollectionRef = getMonthCollectionRef(`${year}-${month.padStart(2, '0')}`);
+            const collectionSnapshot = await getDocs(monthCollectionRef);
+            console.log(`📁 Documents in detailed_aged_analysis/${year}/${month}:`);
+            collectionSnapshot.docs.forEach(doc => {
+                console.log(`  - Document ID: '${doc.id}', Data:`, doc.data());
+            });
+        } catch (error) {
+            console.error('Error listing collection documents:', error);
+        }
+        
+        // Try to get data from the specified year/month
+        for (const accVar of accountVariations) {
+            try {
+                console.log(`🔍 Trying to fetch from detailed_aged_analysis/${year}/${month}/${accVar}`);
+                const docRef = doc(db, 'detailed_aged_analysis', year, month, accVar);
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    foundData = true;
+                    const data = docSnap.data();
+                    console.log(`✅ Found aging data for ${year}-${month} with account variation '${accVar}':`, data);
+                    console.log('Document data keys:', Object.keys(data));
+                    console.log('Document data structure:', JSON.stringify(data, null, 2));
                 
                 // Check if this document has a records array (multiple records)
                 if (data.records && Array.isArray(data.records)) {
@@ -253,18 +284,28 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
                     agingData.ninetyDays += Number(data['90 DAY FACTOR']) || 0;
                     agingData.sixtyDays += Number(data['60 DAY FACTOR']) || 0;
                     agingData.thirtyDays += Number(data['UP TO 30 DAY FACTOR']) || 0;
-                    agingData.current += Number(data['202407']) || 0;  // Current month
+                    // Get the current month value dynamically
+                    const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                    agingData.current += Number((data as any)[currentMonthField]) || 0;  // Current month
                 }
+                
+                // Break out of the loop since we found data
+                break;
             } else {
-                console.log(`No data found in detailed_aged_analysis/${year}/${month}/`);
+                console.log(`❌ No data found for account variation '${accVar}' in detailed_aged_analysis/${year}/${month}/`);
             }
         } catch (error) {
-            console.error(`Error fetching from detailed_aged_analysis/${year}/${month}/:`, error);
+            console.error(`Error fetching account variation '${accVar}' from detailed_aged_analysis/${year}/${month}/:`, error);
         }
+    }
         
-        // If no data found in 2024/10, try searching other years/months
+        // If no data found in the requested year/month, try searching other years/months
         if (!foundData) {
             console.log('Searching other years/months...');
+            
+            // Store original parameters for comparison
+            const originalYear = year;
+            const originalMonth = month.padStart(2, '0');
             
             // Get all year collections
             const rootCollection = collection(db, 'detailed_aged_analysis');
@@ -273,36 +314,39 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
             // Sort years in descending order to get the most recent first
             const years = yearCollections.docs
                 .map(doc => doc.id)
-                .filter(year => !isNaN(Number(year)) && Number(year) >= 2024)
+                .filter(yearId => !isNaN(Number(yearId)) && Number(yearId) >= 2024)
                 .sort((a, b) => Number(b) - Number(a));
                 
             console.log('Available years:', years);
             
             // Iterate through years and months to find the account
-            for (const year of years) {
-                const yearCollection = collection(db, 'detailed_aged_analysis', year);
+            for (const yearId of years) {
+                const yearCollection = collection(db, 'detailed_aged_analysis', yearId);
                 const monthCollections = await getDocs(yearCollection);
                 
                 // Sort months in descending order to get the most recent first
                 const months = monthCollections.docs
                     .map(doc => doc.id)
-                    .filter(month => !isNaN(Number(month)) && Number(month) >= 1 && Number(month) <= 12)
+                    .filter(monthId => !isNaN(Number(monthId)) && Number(monthId) >= 1 && Number(monthId) <= 12)
                     .sort((a, b) => Number(b) - Number(a));
                     
-                console.log(`Available months for ${year}:`, months);
+                console.log(`Available months for ${yearId}:`, months);
                 
-                for (const month of months) {
-                    // Skip 2024/10 since we already checked it
-                    if (year === '2024' && month === '10') continue;
+                for (const monthId of months) {
+                    // Skip the originally requested year/month since we already checked it
+                    if (yearId === originalYear && monthId.padStart(2, '0') === originalMonth) continue;
                     
-                    // Try to get the document directly using the account number as ID
-                    const docRef = doc(db, 'detailed_aged_analysis', year, month, accountNumber);
-                    const docSnap = await getDoc(docRef);
+                    // Try all account number variations for this year/month
+                    for (const accVar of accountVariations) {
+                        try {
+                            console.log(`Fallback: Trying ${yearId}/${monthId}/${accVar}`);
+                            const docRef = doc(db, 'detailed_aged_analysis', yearId, monthId, accVar);
+                            const docSnap = await getDoc(docRef);
                     
                     if (docSnap.exists()) {
                         foundData = true;
                         const data = docSnap.data();
-                        console.log(`Found aging data for ${year}-${month}:`, data);
+                        console.log(`Found aging data for ${yearId}-${monthId}:`, data);
                         
                         // Check if this document has a records array (multiple records)
                         if (data.records && Array.isArray(data.records)) {
@@ -313,7 +357,7 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
                                 agingData.sixtyDays += Number(record['60 DAY FACTOR']) || 0;
                                 agingData.thirtyDays += Number(record['UP TO 30 DAY FACTOR']) || 0;
                                 // Get the current month value dynamically
-                                const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                                const currentMonthField = `${yearId}${monthId.padStart(2, '0')}`;
                                 agingData.current += Number((record as any)[currentMonthField]) || 0;  // Current month
                             });
                         } else {
@@ -323,7 +367,7 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
                             agingData.sixtyDays += Number(data['60 DAY FACTOR']) || 0;
                             agingData.thirtyDays += Number(data['UP TO 30 DAY FACTOR']) || 0;
                             // Get the current month value dynamically
-                            const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                            const currentMonthField = `${yearId}${monthId.padStart(2, '0')}`;
                             agingData.current += Number((data as any)[currentMonthField]) || 0;  // Current month
                         }
                         
@@ -331,16 +375,68 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
                         // In a real app, you might want to aggregate data across multiple months
                         break;
                     }
+                } catch (error) {
+                    console.error(`Error in fallback search for ${yearId}/${monthId}/${accVar}:`, error);
                 }
+            }
+            
+            // If we found data, break out of the month loop
+            if (foundData) break;
+        }
                 
                 // If we found data for this account in the most recent year, we can stop searching
                 if (foundData) break;
             }
         }
         
-        // Do NOT fall back to legacy collections - we want to strictly use data for the selected month/year
+        // Final fallback: Try to find the document using collection queries
+        // This handles cases where the account number might be stored in a field rather than as document ID
         if (!foundData) {
-            console.log(`No aging data found for account ${accountNumber} in ${year}/${month} - NOT falling back to legacy collection`);
+            console.log('Final fallback: Searching collection for account number in fields...');
+            try {
+                const monthCollectionRef = getMonthCollectionRef(`${year}-${month.padStart(2, '0')}`);
+                const querySnapshot = await getDocs(monthCollectionRef);
+                
+                console.log(`Found ${querySnapshot.docs.length} documents in ${year}/${month} collection`);
+                
+                for (const docSnap of querySnapshot.docs) {
+                    const data = docSnap.data();
+                    
+                    // Check if this document matches any of our account number variations
+                    const docAccountNumber = data.ACCOUNT_NO || data.accountNumber;
+                    if (docAccountNumber && accountVariations.includes(String(docAccountNumber).trim())) {
+                        console.log(`✅ Found matching document via collection query:`, docSnap.id, data);
+                        foundData = true;
+                        
+                        // Process the data same as before
+                        if (data.records && Array.isArray(data.records)) {
+                            data.records.forEach((record: DetailedAgedAnalysis) => {
+                                agingData.hundredTwentyPlusDays += Number(record['120 DAY FACTOR']) || 0;
+                                agingData.ninetyDays += Number(record['90 DAY FACTOR']) || 0;
+                                agingData.sixtyDays += Number(record['60 DAY FACTOR']) || 0;
+                                agingData.thirtyDays += Number(record['UP TO 30 DAY FACTOR']) || 0;
+                                const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                                agingData.current += Number((record as any)[currentMonthField]) || 0;
+                            });
+                        } else {
+                            agingData.hundredTwentyPlusDays += Number(data['120 DAY FACTOR']) || 0;
+                            agingData.ninetyDays += Number(data['90 DAY FACTOR']) || 0;
+                            agingData.sixtyDays += Number(data['60 DAY FACTOR']) || 0;
+                            agingData.thirtyDays += Number(data['UP TO 30 DAY FACTOR']) || 0;
+                            const currentMonthField = `${year}${month.padStart(2, '0')}`;
+                            agingData.current += Number((data as any)[currentMonthField]) || 0;
+                        }
+                        break;
+                    }
+                }
+            } catch (error) {
+                console.error('Error in final fallback search:', error);
+            }
+        }
+        
+        if (!foundData) {
+            console.log(`❌ No aging data found for account ${accountNumber} in ${year}/${month} after all searches`);
+            console.log('Account variations tried:', accountVariations);
         }
 
         // Calculate closing balance as sum of all periods
@@ -351,11 +447,22 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
             agingData.thirtyDays +
             agingData.current;
 
+        console.log('=== AGING ANALYSIS FETCH COMPLETE ===');
         if (foundData) {
-            console.log('Processed aging data:', agingData);
+            console.log('✅ SUCCESS: Found and processed aging data for account:', accountNumber);
+            console.log('Final aging data:', agingData);
+            console.log('Data breakdown:');
+            console.log('  - 120+ Days:', agingData.hundredTwentyPlusDays);
+            console.log('  - 90 Days:', agingData.ninetyDays);
+            console.log('  - 60 Days:', agingData.sixtyDays);
+            console.log('  - 30 Days:', agingData.thirtyDays);
+            console.log('  - Current:', agingData.current);
+            console.log('  - Closing Balance:', agingData.closingBalance);
         } else {
-            console.log('No aging data found for account:', accountNumber);
+            console.log('❌ FAILED: No aging data found for account:', accountNumber);
+            console.log('Returning zero values for all aging periods');
         }
+        console.log('=== END AGING ANALYSIS FETCH ===');
 
         return agingData;
     } catch (error) {
