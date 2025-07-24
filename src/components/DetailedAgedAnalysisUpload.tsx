@@ -216,8 +216,27 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                 throw new Error('No records found with valid account numbers. Please check that the ACCOUNT_NO column contains valid data.');
             }
             
-            // Transform data to match the DetailedAgedAnalysis interface expected by the service
-            const transformedRecords: ServiceDetailedAgedAnalysis[] = validRecords.map((record) => {
+            // Get the dynamic current month field based on selected month
+            const [year, month] = selectedMonth.value.split('-');
+            const currentMonthField = `${year}${month}`; // e.g., '202410' for October 2024
+            console.log('Using current month field:', currentMonthField);
+            
+            // Group records by account number and aggregate them
+            const recordsByAccount = new Map<string, {
+                accountNumber: string;
+                days120Plus: number;
+                days90: number;
+                days60: number;
+                days30: number;
+                current: number;
+                total: number;
+            }>();
+            
+            console.log('Aggregating records by account number...');
+            
+            for (const record of validRecords) {
+                const accountNumber = record.ACCOUNT_NO?.toString().trim() || '';
+                
                 // Calculate the 120+ days factor by summing all periods >= 120 days
                 const days120Plus = processAmount(record['120 Days']) + 
                                   processAmount(record['150 Days']) + 
@@ -230,14 +249,40 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                                   processAmount(record['360 Days']) + 
                                   processAmount(record['390 + Days']);
                 
+                // Get or create aggregated record for this account
+                const existing = recordsByAccount.get(accountNumber) || {
+                    accountNumber,
+                    days120Plus: 0,
+                    days90: 0,
+                    days60: 0,
+                    days30: 0,
+                    current: 0,
+                    total: 0
+                };
+                
+                // Aggregate the values
+                existing.days120Plus += days120Plus;
+                existing.days90 += processAmount(record['90 Days']);
+                existing.days60 += processAmount(record['60 Days']);
+                existing.days30 += processAmount(record['30 Days']);
+                existing.current += processAmount(record.Current);
+                existing.total += processAmount(record.TOTAL);
+                
+                recordsByAccount.set(accountNumber, existing);
+            }
+            
+            console.log(`Aggregated ${validRecords.length} records into ${recordsByAccount.size} unique accounts`);
+            
+            // Transform aggregated data to match the DetailedAgedAnalysis interface
+            const transformedRecords: ServiceDetailedAgedAnalysis[] = Array.from(recordsByAccount.values()).map((aggregated) => {
                 return {
-                    ACCOUNT_NO: record.ACCOUNT_NO?.toString() || '',
-                    '120 DAY FACTOR': days120Plus,
-                    '90 DAY FACTOR': processAmount(record['90 Days']),
-                    '60 DAY FACTOR': processAmount(record['60 Days']),
-                    'UP TO 30 DAY FACTOR': processAmount(record['30 Days']),
-                    '202407': processAmount(record.Current), // Current month
-                    TOTAL: processAmount(record.TOTAL),
+                    ACCOUNT_NO: aggregated.accountNumber,
+                    '120 DAY FACTOR': aggregated.days120Plus,
+                    '90 DAY FACTOR': aggregated.days90,
+                    '60 DAY FACTOR': aggregated.days60,
+                    'UP TO 30 DAY FACTOR': aggregated.days30,
+                    [currentMonthField]: aggregated.current, // Dynamic current month field
+                    TOTAL: aggregated.total,
                     uploadedAt: new Date().toISOString()
                 };
             });

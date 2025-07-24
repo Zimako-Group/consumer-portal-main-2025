@@ -7,9 +7,10 @@ export interface DetailedAgedAnalysis {
     '90 DAY FACTOR': number;
     '60 DAY FACTOR': number;
     'UP TO 30 DAY FACTOR': number;
-    '202407': number;  // Current month
     TOTAL: number;
     uploadedAt: string;
+    // Dynamic month fields (e.g., '202407', '202410', etc.)
+    [key: string]: string | number;
 }
 
 export interface AgingAnalysisData {
