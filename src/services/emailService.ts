@@ -171,19 +171,43 @@ export const getEmailTemplate = (type: 'statement_notification' | 'payment_remin
   const templates = {
     statement_notification: {
       subject: 'Your Monthly Statement is Ready for Download',
-      content: `Dear {{customerName}},
+      content: `Dear Customer,
 
-Your monthly statement for {{currentMonth}} is now available for download.
+Please find attached your Mohokare Local Municipality statement of account.
 
-You can access your statement by visiting our customer portal at:
-https://consumerportal.co.za/statement
+Paying your municipal account in full and on time ensures the Municipality can continue delivering essential services to all residents.
 
-Simply enter the last 4 digits of your phone number to search for your account and download your statement.
+Payment Options:
+You may make payments using any of the following convenient methods:
 
-If you have any questions or need assistance, please don't hesitate to contact us.
+Consumer Portal: www.consumerportal.co.za
 
-Best regards,
-The Zimako Team`
+EasyPay: Pay at popular retail outlets such as Pick n Pay and Shoprite Checkers
+
+Debit Orders
+
+Direct Deposits at all major banks
+
+Internet and Cell Phone Banking
+
+Council Pay-Points (Customer Service Centers)
+
+Payment Arrangements:
+If you're unable to pay in full, you can apply for a payment arrangement via the portal.
+Visit www.consumerportal.co.za and click on "Make Arrangement."
+
+Meter Readings:
+To ensure accurate billing, you are encouraged to submit your monthly actual readings.
+Simply visit the portal and click on "Meter Reading" at the end of each month.
+
+Billing Queries:
+For any billing or service-related issues, please log your query online.
+Visit the portal and click on "Log Query", then provide a full description for quick resolution.
+
+Should you have any further questions or require assistance, please don't hesitate to contact us.
+
+Kind regards,
+Mohokare Local Municipality`
     },
     payment_reminder: {
       subject: 'Payment Reminder - Account {{accountNumber}}',

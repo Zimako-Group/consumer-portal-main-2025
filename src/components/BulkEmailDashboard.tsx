@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Send, Users, CheckCircle, AlertCircle, Clock, Eye } from 'lucide-react';
+import { Mail, Send, Users, CheckCircle, AlertCircle, Clock, Eye, History } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../firebaseConfig';
 import { collection, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { sendBulkEmails as sendBulkEmailsService, BulkEmailData } from '../services/emailService';
+import { logEmailBatch, generateBatchId, getEmailStats, EmailStats } from '../services/emailLogService';
 
 interface Customer {
   accountNumber: string;
@@ -28,19 +29,43 @@ const BulkEmailDashboard: React.FC = () => {
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate>({
     id: 'statement_notification',
     subject: 'Your Monthly Statement is Ready for Download',
-    content: `Dear {{customerName}},
+    content: `Dear Customer,
 
-Your monthly statement for {{currentMonth}} is now available for download.
+Please find attached your Mohokare Local Municipality statement of account.
 
-You can access your statement by visiting our customer portal at:
-https://consumerportal.co.za/statement
+Paying your municipal account in full and on time ensures the Municipality can continue delivering essential services to all residents.
 
-Simply enter the last 4 digits of your phone number to search for your account and download your statement.
+Payment Options:
+You may make payments using any of the following convenient methods:
 
-If you have any questions or need assistance, please don't hesitate to contact us.
+Consumer Portal: www.consumerportal.co.za
 
-Best regards,
-The Zimako Team`,
+EasyPay: Pay at popular retail outlets such as Pick n Pay and Shoprite Checkers
+
+Debit Orders
+
+Direct Deposits at all major banks
+
+Internet and Cell Phone Banking
+
+Council Pay-Points (Customer Service Centers)
+
+Payment Arrangements:
+If you're unable to pay in full, you can apply for a payment arrangement via the portal.
+Visit www.consumerportal.co.za and click on "Make Arrangement."
+
+Meter Readings:
+To ensure accurate billing, you are encouraged to submit your monthly actual readings.
+Simply visit the portal and click on "Meter Reading" at the end of each month.
+
+Billing Queries:
+For any billing or service-related issues, please log your query online.
+Visit the portal and click on "Log Query", then provide a full description for quick resolution.
+
+Should you have any further questions or require assistance, please don't hesitate to contact us.
+
+Kind regards,
+Mohokare Local Municipality`,
     type: 'statement_notification'
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -53,25 +78,56 @@ The Zimako Team`,
     emailsSent: 0,
     selectedCount: 0
   });
+  const [historicalStats, setHistoricalStats] = useState<EmailStats>({
+    totalEmailsSent: 0,
+    totalBatches: 0,
+    successRate: 0,
+    recentActivity: []
+  });
+  const [showHistory, setShowHistory] = useState(false);
 
   // Predefined email templates
   const templates: EmailTemplate[] = [
     {
       id: 'statement_notification',
       subject: 'Your Monthly Statement is Ready for Download',
-      content: `Dear {{customerName}},
+      content: `Dear Customer,
 
-Your monthly statement for {{currentMonth}} is now available for download.
+Please find attached your Mohokare Local Municipality statement of account.
 
-You can access your statement by visiting our customer portal at:
-https://consumerportal.co.za/statement
+Paying your municipal account in full and on time ensures the Municipality can continue delivering essential services to all residents.
 
-Simply enter the last 4 digits of your phone number to search for your account and download your statement.
+Payment Options:
+You may make payments using any of the following convenient methods:
 
-If you have any questions or need assistance, please don't hesitate to contact us.
+Consumer Portal: www.consumerportal.co.za
 
-Best regards,
-The Zimako Team`,
+EasyPay: Pay at popular retail outlets such as Pick n Pay and Shoprite Checkers
+
+Debit Orders
+
+Direct Deposits at all major banks
+
+Internet and Cell Phone Banking
+
+Council Pay-Points (Customer Service Centers)
+
+Payment Arrangements:
+If you're unable to pay in full, you can apply for a payment arrangement via the portal.
+Visit www.consumerportal.co.za and click on "Make Arrangement."
+
+Meter Readings:
+To ensure accurate billing, you are encouraged to submit your monthly actual readings.
+Simply visit the portal and click on "Meter Reading" at the end of each month.
+
+Billing Queries:
+For any billing or service-related issues, please log your query online.
+Visit the portal and click on "Log Query", then provide a full description for quick resolution.
+
+Should you have any further questions or require assistance, please don't hesitate to contact us.
+
+Kind regards,
+Mohokare Local Municipality`,
       type: 'statement_notification'
     },
     {
@@ -106,9 +162,10 @@ The Zimako Team`,
     }
   ];
 
-  // Fetch customers from Firestore
+  // Fetch customers and email stats from Firestore
   useEffect(() => {
     fetchCustomers();
+    fetchEmailStats();
   }, []);
 
   // Update stats when customers or selection changes
@@ -121,6 +178,15 @@ The Zimako Team`,
       selectedCount: selectedCustomers.length
     }));
   }, [customers, selectedCustomers]);
+
+  const fetchEmailStats = async () => {
+    try {
+      const stats = await getEmailStats();
+      setHistoricalStats(stats);
+    } catch (error) {
+      console.error('Error fetching email stats:', error);
+    }
+  };
 
   const fetchCustomers = async () => {
     setIsLoading(true);
@@ -349,6 +415,39 @@ The Zimako Team`;
       // Send emails using the email service
       const result = await sendBulkEmailsService(bulkEmailData, apiKey);
       
+      // Log email batch to Firestore
+      try {
+        const batchId = generateBatchId();
+        const emailLogs = result.results.map(emailResult => ({
+          batchId,
+          recipientEmail: emailResult.email,
+          recipientName: selectedCustomerData.find(c => c.email === emailResult.email)?.fullName || 'Unknown',
+          recipientAccountNumber: selectedCustomerData.find(c => c.email === emailResult.email)?.accountNumber || 'Unknown',
+          subject: emailTemplate.subject,
+          content: emailTemplate.content,
+          templateType: emailTemplate.type,
+          status: emailResult.success ? 'sent' as const : 'failed' as const,
+          messageId: emailResult.messageId,
+          error: emailResult.error
+        }));
+
+        await logEmailBatch({
+          batchId,
+          templateType: emailTemplate.type,
+          subject: emailTemplate.subject,
+          totalRecipients: selectedCustomerData.length,
+          successfulSends: result.successful,
+          failedSends: result.failed,
+          completed: true
+        }, emailLogs);
+
+        // Refresh email stats after logging
+        await fetchEmailStats();
+      } catch (logError) {
+        console.error('Error logging email batch:', logError);
+        // Don't fail the entire operation if logging fails
+      }
+      
       toast.dismiss(loadingToast);
       
       if (result.successful > 0) {
@@ -462,6 +561,117 @@ The Zimako Team`;
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Historical Email Stats */}
+          <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-dark-card' : 'bg-white'} shadow-sm mb-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                Email History & Analytics
+              </h3>
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                  isDarkMode 
+                    ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30' 
+                    : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                {showHistory ? 'Hide History' : 'Show History'}
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-blue-500" />
+                  <div>
+                    <p className={`text-xs ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-600'}`}>
+                      Total Emails Sent
+                    </p>
+                    <p className={`text-lg font-semibold ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                      {historicalStats.totalEmailsSent}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2">
+                  <Send className="w-4 h-4 text-green-500" />
+                  <div>
+                    <p className={`text-xs ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-600'}`}>
+                      Total Batches
+                    </p>
+                    <p className={`text-lg font-semibold ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                      {historicalStats.totalBatches}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-dark-bg' : 'bg-gray-50'}`}>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-purple-500" />
+                  <div>
+                    <p className={`text-xs ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-600'}`}>
+                      Success Rate
+                    </p>
+                    <p className={`text-lg font-semibold ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                      {historicalStats.successRate}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {showHistory && (
+              <div className="mt-4">
+                <h4 className={`text-sm font-medium mb-3 ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                  Recent Activity
+                </h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {historicalStats.recentActivity.length > 0 ? (
+                    historicalStats.recentActivity.map((log, index) => (
+                      <div key={index} className={`p-3 rounded-lg border ${isDarkMode ? 'bg-dark-bg border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                log.status === 'sent' ? 'bg-green-500' : 'bg-red-500'
+                              }`} />
+                              <span className={`text-sm font-medium ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
+                                {log.recipientName}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-blue-900/20 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
+                                {log.templateType.replace('_', ' ')}
+                              </span>
+                            </div>
+                            <p className={`text-xs mt-1 ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-600'}`}>
+                              {log.recipientEmail} • {log.recipientAccountNumber}
+                            </p>
+                            {log.error && (
+                              <p className="text-xs text-red-500 mt-1">
+                                Error: {log.error}
+                              </p>
+                            )}
+                          </div>
+                          <div className={`text-xs ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-500'}`}>
+                            {log.sentAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className={`text-center py-4 ${isDarkMode ? 'text-dark-text-secondary' : 'text-gray-500'}`}>
+                      <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No email history available</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
