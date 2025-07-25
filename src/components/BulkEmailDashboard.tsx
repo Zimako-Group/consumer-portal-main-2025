@@ -181,10 +181,13 @@ The Zimako Team`,
 
   const fetchEmailStats = async () => {
     try {
+      console.log('🔄 Dashboard: Fetching email stats...');
       const stats = await getEmailStats();
+      console.log('📊 Dashboard: Received stats:', stats);
       setHistoricalStats(stats);
+      console.log('✅ Dashboard: Historical stats updated');
     } catch (error) {
-      console.error('Error fetching email stats:', error);
+      console.error('❌ Dashboard: Error fetching email stats:', error);
     }
   };
 
@@ -417,19 +420,38 @@ The Zimako Team`;
       
       // Log email batch to Firestore
       try {
+        console.log('💾 Starting email batch logging...');
         const batchId = generateBatchId();
-        const emailLogs = result.results.map(emailResult => ({
-          batchId,
-          recipientEmail: emailResult.email,
-          recipientName: selectedCustomerData.find(c => c.email === emailResult.email)?.fullName || 'Unknown',
-          recipientAccountNumber: selectedCustomerData.find(c => c.email === emailResult.email)?.accountNumber || 'Unknown',
-          subject: emailTemplate.subject,
-          content: emailTemplate.content,
-          templateType: emailTemplate.type,
-          status: emailResult.success ? 'sent' as const : 'failed' as const,
-          messageId: emailResult.messageId,
-          error: emailResult.error
-        }));
+        console.log('🏷️ Generated batch ID:', batchId);
+        console.log('📧 Email results to log:', result.results);
+        
+        const emailLogs = result.results.map(emailResult => {
+          const logEntry: any = {
+            batchId,
+            recipientEmail: emailResult.email,
+            recipientName: selectedCustomerData.find(c => c.email === emailResult.email)?.fullName || 'Unknown',
+            recipientAccountNumber: selectedCustomerData.find(c => c.email === emailResult.email)?.accountNumber || 'Unknown',
+            subject: emailTemplate.subject,
+            content: emailTemplate.content,
+            templateType: emailTemplate.type,
+            status: emailResult.success ? 'sent' as const : 'failed' as const
+          };
+          
+          // Only add messageId if it exists (for successful emails)
+          if (emailResult.messageId) {
+            logEntry.messageId = emailResult.messageId;
+          }
+          
+          // Only add error if it exists (for failed emails)
+          if (emailResult.error) {
+            logEntry.error = emailResult.error;
+          }
+          
+          return logEntry;
+        });
+        
+        console.log('📄 Prepared email logs:', emailLogs);
+        console.log('📦 Logging batch with', emailLogs.length, 'email records');
 
         await logEmailBatch({
           batchId,
@@ -440,8 +462,11 @@ The Zimako Team`;
           failedSends: result.failed,
           completed: true
         }, emailLogs);
+        
+        console.log('✅ Email batch logged successfully!');
 
         // Refresh email stats after logging
+        console.log('🔄 Refreshing email stats after logging...');
         await fetchEmailStats();
       } catch (logError) {
         console.error('Error logging email batch:', logError);
@@ -460,8 +485,14 @@ The Zimako Team`;
         }));
         
         if (result.failed > 0) {
+          const failedEmails = result.results.filter(r => !r.success);
           toast.error(`Failed to send ${result.failed} emails. Check console for details.`);
-          console.error('Failed email results:', result.results.filter(r => !r.success));
+          console.error('Failed email results:', failedEmails);
+          
+          // Log detailed failure information
+          failedEmails.forEach(failed => {
+            console.error(`❌ Failed to send to ${failed.email}: ${failed.error}`);
+          });
         }
         
         // Reset selection after successful send
@@ -864,7 +895,7 @@ The Zimako Team`;
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {customers.map((customer) => (
+                  {customers.map((customer, index) => (
                     <div
                       key={customer.accountNumber}
                       className={`p-3 rounded-lg border ${
@@ -880,7 +911,19 @@ The Zimako Team`;
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-3">
+                            {/* Customer Number */}
+                            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                              selectedCustomers.includes(customer.accountNumber)
+                                ? isDarkMode
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-blue-600 text-white'
+                                : isDarkMode
+                                  ? 'bg-gray-600 text-gray-300'
+                                  : 'bg-gray-300 text-gray-700'
+                            }`}>
+                              {index + 1}
+                            </div>
                             <input
                               type="checkbox"
                               checked={selectedCustomers.includes(customer.accountNumber)}

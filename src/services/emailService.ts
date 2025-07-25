@@ -116,27 +116,42 @@ export const sendBulkEmails = async (bulkEmailData: BulkEmailData, apiKey: strin
       templateType: bulkEmailData.templateType
     };
 
-    // Call the backend API
-    const response = await fetch(`${API_BASE_URL}/api/send-emails`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestData)
-    });
+    console.log(`📧 Sending ${bulkEmailData.recipients.length} emails via backend API...`);
+    
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+    
+    try {
+      // Call the backend API
+      const response = await fetch(`${API_BASE_URL}/api/send-emails`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: ApiEmailResponse = await response.json();
+      console.log(`✅ Backend API response: ${result.successful} successful, ${result.failed} failed`);
+
+      return {
+        totalSent: result.totalSent,
+        successful: result.successful,
+        failed: result.failed,
+        results: result.results
+      };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      throw fetchError;
     }
-
-    const result: ApiEmailResponse = await response.json();
-
-    return {
-      totalSent: result.totalSent,
-      successful: result.successful,
-      failed: result.failed,
-      results: result.results
-    };
   } catch (error) {
     console.error('Error sending bulk emails:', error);
     

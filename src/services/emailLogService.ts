@@ -58,10 +58,21 @@ export const logEmailBatch = async (
       sentAt: timestamp
     });
 
+    // Clean email log data to remove undefined values
+    const cleanEmailLog = (log: any) => {
+      const cleaned: any = {};
+      Object.keys(log).forEach(key => {
+        if (log[key] !== undefined) {
+          cleaned[key] = log[key];
+        }
+      });
+      return cleaned;
+    };
+
     // Create individual email log documents
     const emailLogsPromises = emailLogs.map(emailLog => 
       addDoc(collection(dbInstance, 'emailLogs'), {
-        ...emailLog,
+        ...cleanEmailLog(emailLog),
         sentAt: timestamp
       })
     );
@@ -183,8 +194,10 @@ export const getEmailBatches = async (limitCount: number = 20): Promise<EmailBat
  */
 export const getEmailStats = async (): Promise<EmailStats> => {
   try {
+    console.log('📊 Fetching email statistics...');
+    
     if (!db) {
-      console.warn('Database connection not available');
+      console.warn('⚠️ Database connection not available for email stats');
       return {
         totalEmailsSent: 0,
         totalBatches: 0,
@@ -193,37 +206,52 @@ export const getEmailStats = async (): Promise<EmailStats> => {
       };
     }
 
+    const dbInstance = db;
+    
     // Get all email logs
-    const emailLogsRef = collection(db, 'emailLogs');
+    const emailLogsRef = collection(dbInstance, 'emailLogs');
+    console.log('📋 Querying emailLogs collection...');
     const allLogsSnapshot = await getDocs(emailLogsRef);
+    
+    console.log(`📄 Found ${allLogsSnapshot.size} email log documents`);
     
     let totalEmailsSent = 0;
     let successfulEmails = 0;
 
     allLogsSnapshot.forEach((doc) => {
       const log = doc.data() as EmailLog;
+      console.log(`📧 Email log: ${log.recipientEmail} - Status: ${log.status}`);
       totalEmailsSent++;
       if (log.status === 'sent') {
         successfulEmails++;
       }
     });
 
+    console.log(`📊 Email logs summary: ${totalEmailsSent} total, ${successfulEmails} successful`);
+
     // Get total batches
-    const batchesRef = collection(db, 'emailBatches');
+    const batchesRef = collection(dbInstance, 'emailBatches');
+    console.log('📋 Querying emailBatches collection...');
     const batchesSnapshot = await getDocs(batchesRef);
     const totalBatches = batchesSnapshot.size;
+    console.log(`📄 Found ${totalBatches} email batch documents`);
 
     // Get recent activity
+    console.log('🕰️ Fetching recent activity...');
     const recentActivity = await getRecentEmailLogs(10);
+    console.log(`📅 Found ${recentActivity.length} recent activities`);
 
     const successRate = totalEmailsSent > 0 ? (successfulEmails / totalEmailsSent) * 100 : 0;
-
-    return {
+    
+    const stats = {
       totalEmailsSent,
       totalBatches,
       successRate: Math.round(successRate * 100) / 100,
       recentActivity
     };
+    
+    console.log('✅ Email stats calculated:', stats);
+    return stats;
   } catch (error) {
     console.error('❌ Error fetching email stats:', error);
     return {

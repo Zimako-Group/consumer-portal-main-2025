@@ -28,7 +28,12 @@ admin.initializeApp({
 const bucket = admin.storage().bucket();
 
 // Initialize Resend
-const resend = new Resend(process.env.VITE_RESEND_API_KEY);
+const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY;
+if (!RESEND_API_KEY) {
+  console.error('❌ RESEND_API_KEY not found in environment variables');
+  console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('RESEND')));
+}
+const resend = new Resend(RESEND_API_KEY);
 
 // Import routes
 const adminUsersRouter = require('./routes/adminUsers');
@@ -57,12 +62,56 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Email API server is running' });
 });
 
+// Resend API test endpoint
+app.get('/api/test-resend', async (req, res) => {
+  try {
+    console.log('🧪 Testing Resend API configuration...');
+    console.log('API Key configured:', !!RESEND_API_KEY);
+    console.log('API Key preview:', RESEND_API_KEY ? RESEND_API_KEY.substring(0, 10) + '...' : 'NOT SET');
+    
+    if (!RESEND_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: 'RESEND_API_KEY not configured',
+        availableEnvVars: Object.keys(process.env).filter(key => key.includes('RESEND'))
+      });
+    }
+    
+    // Test with a simple API call (this won't send an email, just validates the API key)
+    const testResponse = await resend.emails.send({
+      from: 'Zimako <noreply@consumerportal.co.za>',
+      to: 'test@example.com', // This will fail but should give us API validation info
+      subject: 'Test',
+      html: 'Test'
+    });
+    
+    res.json({
+      success: true,
+      message: 'Resend API is configured and accessible',
+      apiKeyConfigured: true
+    });
+  } catch (error) {
+    console.error('❌ Resend API test failed:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Resend API test failed',
+      error: error.message,
+      apiKeyConfigured: !!RESEND_API_KEY
+    });
+  }
+});
+
 // Send emails endpoint
 app.post('/api/send-emails', async (req, res) => {
   try {
     const { recipients, subject, content, templateType } = req.body;
 
+    console.log(`✉️ Starting bulk email send for ${recipients?.length || 0} recipients`);
+    console.log('Template type:', templateType);
+    console.log('Subject:', subject?.substring(0, 50) + '...');
+
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      console.error('❌ No recipients provided');
       return res.status(400).json({
         success: false,
         message: 'Recipients array is required and must not be empty'
@@ -70,9 +119,18 @@ app.post('/api/send-emails', async (req, res) => {
     }
 
     if (!subject || !content) {
+      console.error('❌ Missing subject or content');
       return res.status(400).json({
         success: false,
         message: 'Subject and content are required'
+      });
+    }
+
+    if (!RESEND_API_KEY) {
+      console.error('❌ RESEND_API_KEY not configured');
+      return res.status(500).json({
+        success: false,
+        message: 'Email service not configured properly'
       });
     }
 
@@ -82,11 +140,17 @@ app.post('/api/send-emails', async (req, res) => {
 
     // Process emails in batches to avoid rate limiting
     const batchSize = 10;
+    console.log(`📦 Processing ${recipients.length} emails in batches of ${batchSize}`);
+    
     for (let i = 0; i < recipients.length; i += batchSize) {
       const batch = recipients.slice(i, i + batchSize);
+      console.log(`📦 Processing batch ${Math.floor(i/batchSize) + 1}: emails ${i + 1}-${Math.min(i + batchSize, recipients.length)}`);
+      console.log('Batch recipients:', batch.map(r => r.email));
       
       const batchPromises = batch.map(async (recipient) => {
         try {
+          console.log(`📧 Sending email to: ${recipient.email}`);
+          
           // Personalize content
           const personalizedContent = personalizeEmailContent(content, recipient.name, recipient.accountNumber);
           const personalizedSubject = personalizeEmailSubject(subject, recipient.name, recipient.accountNumber);
@@ -101,8 +165,11 @@ app.post('/api/send-emails', async (req, res) => {
             subject: personalizedSubject,
             html: htmlContent,
           });
+          
+          console.log(`✅ Email sent successfully to ${recipient.email}:`, response.data?.id);
 
           if (response.error) {
+            console.error(`❌ Email failed for ${recipient.email}:`, response.error.message);
             failed++;
             return {
               email: recipient.email,
@@ -118,6 +185,7 @@ app.post('/api/send-emails', async (req, res) => {
             messageId: response.data?.id
           };
         } catch (error) {
+          console.error(`❌ Exception sending email to ${recipient.email}:`, error.message);
           failed++;
           return {
             email: recipient.email,
@@ -129,12 +197,19 @@ app.post('/api/send-emails', async (req, res) => {
 
       const batchResults = await Promise.all(batchPromises);
       results.push(...batchResults);
+      
+      const batchSuccessful = batchResults.filter(r => r.success).length;
+      const batchFailed = batchResults.filter(r => !r.success).length;
+      console.log(`📦 Batch ${Math.floor(i/batchSize) + 1} completed: ${batchSuccessful} successful, ${batchFailed} failed`);
 
       // Add delay between batches
       if (i + batchSize < recipients.length) {
+        console.log('⏳ Waiting 1 second before next batch...');
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+    
+    console.log(`🎉 Bulk email send completed: ${successful} successful, ${failed} failed out of ${recipients.length} total`);
 
     res.json({
       success: successful > 0,
