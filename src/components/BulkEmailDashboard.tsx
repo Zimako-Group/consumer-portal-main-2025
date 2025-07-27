@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Send, Users, CheckCircle, AlertCircle, Clock, Eye, History } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../firebaseConfig';
@@ -85,6 +85,16 @@ Mohokare Local Municipality`,
     recentActivity: []
   });
   const [showHistory, setShowHistory] = useState(false);
+  
+  // Auto-send functionality state
+  const [isAutoSending, setIsAutoSending] = useState(false);
+  const [autoSendInterval, setAutoSendInterval] = useState<NodeJS.Timeout | null>(null);
+  const [currentAutoIndex, setCurrentAutoIndex] = useState(1479); // Start from 1480 (0-based index)
+  const [autoSendCount, setAutoSendCount] = useState(0);
+  
+  // Use ref to track the actual current index for the interval function
+  const currentAutoIndexRef = useRef(1479);
+  const autoSendCountRef = useRef(0);
 
   // Predefined email templates
   const templates: EmailTemplate[] = [
@@ -254,6 +264,180 @@ The Zimako Team`,
       setIsLoading(false);
     }
   };
+
+  // Auto-send functionality
+  const startAutoSend = () => {
+    if (isAutoSending) {
+      toast.error('Auto-send is already running!');
+      return;
+    }
+
+    if (customers.length === 0) {
+      toast.error('No customers loaded. Please refresh the customer list first.');
+      return;
+    }
+
+    if (currentAutoIndexRef.current >= customers.length) {
+      toast.error('All customers have been processed. Reset the index to continue.');
+      return;
+    }
+
+    setIsAutoSending(true);
+    setAutoSendCount(0);
+    autoSendCountRef.current = 0;
+    
+    toast.success(`🚀 Auto-send started! Sending 2 emails every 6 seconds from customer #${currentAutoIndexRef.current + 1}`);
+    
+    // Start the interval
+    const interval = setInterval(() => {
+      sendNextBatch();
+    }, 6000); // 6 seconds
+    
+    setAutoSendInterval(interval);
+    
+    // Send first batch immediately
+    sendNextBatch();
+  };
+
+  const stopAutoSend = () => {
+    if (autoSendInterval) {
+      clearInterval(autoSendInterval);
+      setAutoSendInterval(null);
+    }
+    setIsAutoSending(false);
+    toast(`⏹️ Auto-send stopped. Sent ${autoSendCountRef.current} emails total.`);
+  };
+
+  const sendNextBatch = async () => {
+    try {
+      // Get API key from environment variables
+      const apiKey = import.meta.env.VITE_RESEND_API_KEY;
+      if (!apiKey) {
+        toast.error('Resend API key is not configured. Please set VITE_RESEND_API_KEY in your .env file.');
+        stopAutoSend();
+        return;
+      }
+      
+      // Get current index from ref
+      const currentIndex = currentAutoIndexRef.current;
+      
+      // Get next 2 customers
+      const nextCustomers = customers.slice(currentIndex, currentIndex + 2);
+      
+      if (nextCustomers.length === 0) {
+        // No more customers, stop auto-send
+        stopAutoSend();
+        toast.success(`✅ Auto-send completed! All customers processed. Total sent: ${autoSendCountRef.current}`);
+        return;
+      }
+
+      console.log(`🤖 Auto-sending to customers ${currentIndex + 1}-${currentIndex + nextCustomers.length}:`, 
+        nextCustomers.map(c => `${c.fullName} (${c.email})`));
+
+      // Prepare bulk email data
+      const bulkEmailData: BulkEmailData = {
+        recipients: nextCustomers.map(customer => ({
+          email: customer.email,
+          name: customer.fullName,
+          accountNumber: customer.accountNumber
+        })),
+        subject: emailTemplate.subject,
+        content: emailTemplate.content,
+        templateType: emailTemplate.type
+      };
+
+      // Send emails
+      const result = await sendBulkEmailsService(bulkEmailData, apiKey);
+      
+      // Update counters using refs first, then sync with state
+      currentAutoIndexRef.current += 2;
+      autoSendCountRef.current += nextCustomers.length;
+      
+      // Sync state with ref values
+      setCurrentAutoIndex(currentAutoIndexRef.current);
+      setAutoSendCount(autoSendCountRef.current);
+      
+      // Show success toast
+      const successCount = result.successful;
+      const failedCount = result.failed;
+      
+      if (successCount > 0) {
+        toast.success(`📧 Batch sent! ✅ ${successCount} successful, ❌ ${failedCount} failed | Total sent: ${autoSendCountRef.current}`);
+      } else {
+        toast.error(`❌ Batch failed! All ${failedCount} emails failed to send.`);
+      }
+
+      // Log the batch (same as manual sending)
+      try {
+        console.log('💾 Auto-send: Starting email batch logging...');
+        const batchId = generateBatchId();
+        
+        const emailLogs = result.results.map((emailResult, index) => {
+          // Find the corresponding customer data
+          const customerData = nextCustomers[index];
+          
+          const logEntry: any = {
+            batchId,
+            recipientEmail: emailResult.email,
+            recipientName: customerData?.fullName || 'Unknown',
+            recipientAccountNumber: customerData?.accountNumber || 'Unknown',
+            subject: emailTemplate.subject,
+            content: emailTemplate.content,
+            templateType: emailTemplate.type,
+            status: emailResult.success ? 'sent' : 'failed',
+            timestamp: new Date(),
+            messageId: emailResult.messageId || null
+          };
+
+          // Only add error field if there's an actual error
+          if (emailResult.error) {
+            logEntry.error = emailResult.error;
+          }
+          
+          return logEntry;
+        });
+
+        await logEmailBatch({
+          batchId,
+          templateType: emailTemplate.type,
+          subject: emailTemplate.subject,
+          totalRecipients: nextCustomers.length,
+          successfulSends: result.successful,
+          failedSends: result.failed,
+          completed: true
+        }, emailLogs);
+        
+        console.log('✅ Auto-send: Email batch logged successfully!');
+        
+        // Refresh email stats
+        await fetchEmailStats();
+      } catch (logError) {
+        console.error('❌ Auto-send: Error logging email batch:', logError);
+      }
+      
+    } catch (error) {
+      console.error('❌ Auto-send error:', error);
+      toast.error(`Auto-send error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      stopAutoSend();
+    }
+  };
+
+  const resetAutoIndex = () => {
+    currentAutoIndexRef.current = 1479; // Reset to start from customer 1480
+    autoSendCountRef.current = 0;
+    setCurrentAutoIndex(1479);
+    setAutoSendCount(0);
+    toast('Auto-send index reset to customer #1480');
+  };
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSendInterval) {
+        clearInterval(autoSendInterval);
+      }
+    };
+  }, [autoSendInterval]);
 
   const handleTemplateChange = (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
@@ -832,6 +1016,77 @@ The Zimako Team`;
                 </div>
               )}
             </button>
+            
+            {/* Auto-Send Controls */}
+            <div className={`mt-4 p-4 rounded-lg border-2 border-dashed ${
+              isDarkMode 
+                ? 'border-yellow-600 bg-yellow-900/20' 
+                : 'border-yellow-400 bg-yellow-50'
+            }`}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                <h3 className={`font-semibold ${
+                  isDarkMode ? 'text-yellow-300' : 'text-yellow-700'
+                }`}>
+                  🤖 Auto-Send Mode (Testing)
+                </h3>
+              </div>
+              
+              <div className={`text-sm mb-3 ${
+                isDarkMode ? 'text-yellow-200' : 'text-yellow-600'
+              }`}>
+                Automatically sends 2 emails every 6 seconds starting from customer #{currentAutoIndex + 1}.
+                <br />
+                <strong>Current Progress:</strong> {autoSendCount} emails sent | Next: Customer #{currentAutoIndex + 1}
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={startAutoSend}
+                  disabled={isAutoSending || customers.length === 0}
+                  className={`px-4 py-2 text-sm rounded font-medium transition-colors ${
+                    isAutoSending || customers.length === 0
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                >
+                  {isAutoSending ? '🔄 Running...' : '🚀 Start Auto-Send'}
+                </button>
+                
+                <button
+                  onClick={stopAutoSend}
+                  disabled={!isAutoSending}
+                  className={`px-4 py-2 text-sm rounded font-medium transition-colors ${
+                    !isAutoSending
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                >
+                  ⏹️ Stop
+                </button>
+                
+                <button
+                  onClick={resetAutoIndex}
+                  disabled={isAutoSending}
+                  className={`px-4 py-2 text-sm rounded font-medium transition-colors ${
+                    isAutoSending
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  🔄 Reset to #1480
+                </button>
+              </div>
+              
+              {isAutoSending && (
+                <div className={`mt-3 flex items-center gap-2 text-sm ${
+                  isDarkMode ? 'text-green-300' : 'text-green-600'
+                }`}>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  Auto-send is running... Next batch in 6 seconds
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Customer Selection Section */}

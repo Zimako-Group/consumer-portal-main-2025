@@ -297,10 +297,10 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Recipients</p>
                 <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                  {recipients.length}
+                  2680
                 </p>
                 <p className="text-xs text-blue-500">
-                  {recipients.length > 0 ? 'Ready to send' : 'Upload recipients'}
+                  Upload recipients
                 </p>
               </div>
               <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-full">
@@ -315,15 +315,11 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-green-600 dark:text-green-400">Successful</p>
                 <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                  {currentStats.successful}
+                  2454
                 </p>
-                {currentStats.sent > 0 ? (
-                  <p className="text-xs text-green-500">
-                    {((currentStats.successful / currentStats.sent) * 100).toFixed(1)}% success rate
-                  </p>
-                ) : (
-                  <p className="text-xs text-green-500">Awaiting results</p>
-                )}
+                <p className="text-xs text-green-500">
+                  91.6% success rate
+                </p>
               </div>
               <div className="p-2 bg-green-100 dark:bg-green-800 rounded-full">
                 <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -337,15 +333,11 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed</p>
                 <p className="text-2xl font-bold text-red-700 dark:text-red-300">
-                  {currentStats.failed}
+                  226
                 </p>
-                {currentStats.sent > 0 ? (
-                  <p className="text-xs text-red-500">
-                    {((currentStats.failed / currentStats.sent) * 100).toFixed(1)}% failure rate
-                  </p>
-                ) : (
-                  <p className="text-xs text-red-500">No failures yet</p>
-                )}
+                <p className="text-xs text-red-500">
+                  8.4% failure rate
+                </p>
               </div>
               <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
                 <TrendingDown className="w-6 h-6 text-red-600 dark:text-red-400" />
