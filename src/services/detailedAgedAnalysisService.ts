@@ -113,12 +113,14 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
         
         console.log(`Grouped ${records.length} records into ${Object.keys(recordsByAccount).length} unique accounts`);
         
-        const batch = writeBatch(db);
+        let batch = writeBatch(db);
         let count = 0;
         let failed = 0;
         let batchCount = 0;
         const batchSize = 500; // Firestore batch limit
         const totalAccounts = Object.keys(recordsByAccount).length;
+        
+        console.log(`Starting upload of ${totalAccounts} unique accounts...`);
         
         // Process each account
         for (const [accountNumber, accountRecords] of Object.entries(recordsByAccount)) {
@@ -161,10 +163,13 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
                     progressCallback(Math.round((count / totalAccounts) * 100));
                 }
                 
-                // Commit batch when it reaches the limit
+                // Commit batch when it reaches the limit and create a new batch
                 if (batchCount >= batchSize) {
                     await batch.commit();
-                    console.log(`Committed batch: ${count}/${totalAccounts}`);
+                    console.log(`Committed batch ${Math.ceil(count / batchSize)}: ${count}/${totalAccounts} accounts processed`);
+                    
+                    // Create a new batch for the next set of records
+                    batch = writeBatch(db);
                     batchCount = 0;
                 }
             } catch (error) {
@@ -176,8 +181,10 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
         // Commit any remaining records
         if (batchCount > 0) {
             await batch.commit();
-            console.log(`Committed final batch: ${count}/${totalAccounts}`);
+            console.log(`Committed final batch: ${count}/${totalAccounts} accounts processed`);
         }
+        
+        console.log(`Upload complete! Total accounts processed: ${count}, Failed: ${failed}`);
 
         return {
             success: true,

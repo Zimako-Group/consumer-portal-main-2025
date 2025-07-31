@@ -1,4 +1,4 @@
-import { collection, writeBatch, doc, getDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export interface DetailedLevied {
@@ -147,21 +147,29 @@ export const uploadDetailedLevied = async (
         let processedBatches = 0;
         const totalRecords = records.length;
         
-        // Use a smaller batch size to prevent transaction too big errors
-        const MAX_BATCH_SIZE = 100; // Reduced from 500 to 100
+        // Use a much smaller batch size to prevent rate limiting
+        const MAX_BATCH_SIZE = 25; // Reduced to 25 to prevent write stream exhaustion
 
-        // Group records by account number
+        // Group records by account number but preserve all individual records
         const recordsByAccount: { [accountNumber: string]: DetailedLevied[] } = {};
         
         for (const record of records) {
-            const accountNumber = record.ACCOUNT_NO;
+            const accountNumber = record.ACCOUNT_NO?.toString().trim();
+            if (!accountNumber || accountNumber === '') {
+                console.warn('Skipping record with empty account number:', record);
+                failedRecords++;
+                continue;
+            }
+            
             if (!recordsByAccount[accountNumber]) {
                 recordsByAccount[accountNumber] = [];
             }
             recordsByAccount[accountNumber].push(record);
         }
 
-        // Process records by account number - create one document per account
+        console.log(`Grouped ${records.length} records into ${Object.keys(recordsByAccount).length} unique accounts`);
+
+        // Process records by account number - create one document per account with nested records
         const accountNumbers = Object.keys(recordsByAccount);
         const totalBatches = Math.ceil(accountNumbers.length / MAX_BATCH_SIZE);
         
@@ -173,42 +181,43 @@ export const uploadDetailedLevied = async (
                 for (const accountNumber of batchAccountNumbers) {
                     const accountRecords = recordsByAccount[accountNumber];
                     
-                    // Validate account number before using as document ID
-                    if (!accountNumber || accountNumber.toString().trim() === '') {
-                        console.warn('Skipping record with empty account number:', accountRecords[0]);
-                        failedRecords += accountRecords.length;
-                        continue;
-                    }
-                    
-                    const sanitizedAccountNumber = accountNumber.toString().trim();
-                    
                     // Use account number as document ID
-                    const accountDoc = doc(monthCollectionRef, sanitizedAccountNumber);
+                    const accountDoc = doc(monthCollectionRef, accountNumber);
                     
-                    // Store the first record's data as the main document (since all records for an account should have the same customer details)
-                    const mainRecord = accountRecords[0];
-                    
-                    // Create the document data without undefined fields
+                    // Create the document data with all records nested
                     const documentData: any = {
-                        ...mainRecord,
-                        accountNumber: sanitizedAccountNumber,
+                        accountNumber: accountNumber,
                         uploadDate,
-                        uploadedAt: new Date().toISOString()
+                        uploadedAt: new Date().toISOString(),
+                        totalRecords: accountRecords.length,
+                        records: accountRecords // Store all individual records in an array
                     };
                     
-                    // Only add records field if there are multiple records
-                    if (accountRecords.length > 1) {
-                        documentData.records = accountRecords;
-                    }
-                    
                     batch.set(accountDoc, documentData);
-                    
                     totalProcessed += accountRecords.length;
                 }
                 
-                // Commit this batch
-                await batch.commit();
-                processedBatches++;
+                // Commit this batch with retry logic
+                let retryCount = 0;
+                const maxRetries = 3;
+                let batchCommitted = false;
+                
+                while (!batchCommitted && retryCount < maxRetries) {
+                    try {
+                        await batch.commit();
+                        batchCommitted = true;
+                        processedBatches++;
+                        console.log(`Committed batch ${processedBatches}/${totalBatches}: ${Math.min(i + MAX_BATCH_SIZE, accountNumbers.length)}/${accountNumbers.length} accounts processed`);
+                    } catch (commitError: any) {
+                        retryCount++;
+                        if (commitError.code === 'resource-exhausted' && retryCount < maxRetries) {
+                            console.warn(`Rate limited on batch ${processedBatches + 1}, retrying in ${retryCount * 2} seconds... (attempt ${retryCount}/${maxRetries})`);
+                            await new Promise(resolve => setTimeout(resolve, retryCount * 2000)); // Exponential backoff
+                        } else {
+                            throw commitError; // Re-throw if not rate limiting or max retries reached
+                        }
+                    }
+                }
                 
                 if (progressCallback) {
                     progressCallback({
@@ -221,8 +230,8 @@ export const uploadDetailedLevied = async (
                     });
                 }
                 
-                // Add a delay between batches
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Add a longer delay between batches to prevent rate limiting
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Increased to 1 second
                 
             } catch (error) {
                 console.error(`Error processing batch ${processedBatches + 1}:`, error);
@@ -289,44 +298,44 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string, year: 
         const currentDate = new Date().toISOString().split('T')[0];
         
         // Try to get the document directly using the account number as document ID
+        // Records are now nested in a 'records' array within the account document
         try {
-            const docRef = doc(db, 'detailed_levied', year, month, accountNumber);
-            const docSnap = await getDoc(docRef);
+            const monthCollectionRef = getMonthCollectionRef(`${year}-${month.padStart(2, '0')}`);
+            const docSnap = await getDocs(monthCollectionRef);
             
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                console.log(`Found detailed levied data for account ${accountNumber}:`, data);
+            console.log(`Searching for account ${accountNumber} in ${docSnap.size} documents`);
+            
+            // Look for the account document
+            docSnap.forEach((doc: any) => {
+                const data = doc.data();
                 
-                // Check if this document has a records array (multiple records)
-                if (data.records && Array.isArray(data.records)) {
-                    // Process each record in the array
-                    data.records.forEach((record: DetailedLevied) => {
-                        accountDetails.push({
-                            code: record.TARIFF_CODE || 'N/A',
-                            description: record.TOS_DESC || 'N/A',
-                            units: '1',
-                            tariff: record.TOS_DESC || 'N/A',
-                            value: getDynamicMonthValue(record, year, month) || 0, // Use value for selected month/year
-                            date: currentDate
+                // Check if this is our account document
+                if (data.accountNumber === accountNumber) {
+                    console.log(`Found account document for ${accountNumber} with ${data.totalRecords || 0} records`);
+                    
+                    // Process all nested records
+                    if (data.records && Array.isArray(data.records)) {
+                        data.records.forEach((record: DetailedLevied) => {
+                            accountDetails.push({
+                                code: record.TARIFF_CODE || 'N/A',
+                                description: record.TOS_DESC || 'N/A',
+                                units: '1',
+                                tariff: record.TOS_DESC || 'N/A',
+                                value: getDynamicMonthValue(record, year, month) || 0,
+                                date: currentDate
+                            });
                         });
-                    });
-                } else {
-                    // Process single record document
-                    const record = data as DetailedLevied;
-                    accountDetails.push({
-                        code: record.TARIFF_CODE || 'N/A',
-                        description: record.TOS_DESC || 'N/A',
-                        units: '1',
-                        tariff: record.TOS_DESC || 'N/A',
-                        value: record.M202410 || 0, // Use October 2024 value
-                        date: currentDate
-                    });
+                    }
                 }
-            } else {
+            });
+            
+            if (accountDetails.length === 0) {
                 console.log(`No detailed levied data found for account ${accountNumber} in ${year}/${month}`);
+            } else {
+                console.log(`Found ${accountDetails.length} detailed levied records for account ${accountNumber}`);
             }
         } catch (error) {
-            console.error(`Error fetching document for account ${accountNumber}:`, error);
+            console.error(`Error fetching account document for ${accountNumber}:`, error);
         }
         
         // Do NOT fall back to legacy collections - we want to strictly use data for the selected month/year
