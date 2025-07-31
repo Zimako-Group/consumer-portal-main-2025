@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import { format } from 'date-fns';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
@@ -36,6 +36,13 @@ interface CustomerData {
   lastPaymentAmount: number;
 }
 
+interface MonthOption {
+  value: string;
+  label: string;
+  year: string;
+  month: string;
+}
+
 export default function Statement() {
   const { currentUser, userData } = useAuth();
   const [selectedDateRange, setSelectedDateRange] = useState<[Date | null, Date | null]>([null, null]);
@@ -44,13 +51,32 @@ export default function Statement() {
   const [loading, setLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<MonthOption>({
+    value: '2024-10',
+    label: 'October 2024',
+    year: '2024',
+    month: '10'
+  });
   const statementGenerator = new StatementGenerator({});
+
+  // Available months for statement generation
+  const availableMonths: MonthOption[] = [
+    { value: '2024-10', label: 'October 2024', year: '2024', month: '10' },
+    { value: '2024-11', label: 'November 2024', year: '2024', month: '11' },
+    { value: '2024-12', label: 'December 2024', year: '2024', month: '12' }
+  ];
 
   useEffect(() => {
     const fetchCustomerData = async () => {
       try {
         if (!currentUser || !userData?.accountNumber) {
           toast.error('Please log in to view statements');
+          setLoading(false);
+          return;
+        }
+
+        if (!db) {
+          toast.error('Database connection not available');
           setLoading(false);
           return;
         }
@@ -131,11 +157,11 @@ export default function Statement() {
         return;
       }
 
-      // Create input for statement generator
+      // Create input for statement generator using selected month
       const statementInput = {
         accountNumber: customerData.accountNumber,
-        month: format(new Date(), 'MM'),
-        year: format(new Date(), 'yyyy')
+        month: selectedMonth.month,
+        year: selectedMonth.year
       };
 
       // Generate statement using the StatementGenerator instance
@@ -144,17 +170,13 @@ export default function Statement() {
       await logUserActivity(
         currentUser.uid,
         'STATEMENT_DOWNLOAD',
-        `Downloaded statement for ${format(new Date(), 'MMMM yyyy')}`,
+        `Downloaded statement for ${selectedMonth.label} - Account: ${customerData.accountNumber}`,
         {
-          statementMonth: format(new Date(), 'MMMM yyyy'),
-          accountNumber: customerData.accountNumber,
-          openingBalance: currentStatement?.openingBalance || 0,
-          closingBalance: currentStatement?.closingBalance || 0,
-          transactionCount: filteredTransactions.length
+          statementMonth: selectedMonth.label
         }
       );
       
-      toast.success('Statement downloaded successfully');
+      toast.success(`Statement for ${selectedMonth.label} downloaded successfully`);
     } catch (error) {
       console.error('Error generating statement:', error);
       toast.error('Failed to generate statement');
@@ -202,31 +224,47 @@ export default function Statement() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
-              Financial Statement
+              Financial Statement - {selectedMonth.label}
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Account: {customerData?.accountNumber}
             </p>
           </div>
-          <button
-            onClick={handleDownloadPDF}
-            disabled={isDownloading}
-            className={`flex items-center px-4 py-2 bg-theme text-white text-sm rounded-md transition-all transform shadow-sm ${
-              isDownloading ? 'opacity-75 cursor-not-allowed' : 'hover:bg-theme/90 hover:scale-102'
-            }`}
-          >
-            {isDownloading ? (
-              <>
-                <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-sm">Downloading...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-1.5" />
-                <span className="text-sm">Download Statement</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedMonth.value}
+              onChange={(e) => {
+                const selected = availableMonths.find(month => month.value === e.target.value);
+                if (selected) setSelectedMonth(selected);
+              }}
+              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-theme focus:border-transparent dark:bg-dark-hover dark:text-white"
+            >
+              {availableMonths.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              className={`flex items-center px-4 py-2 bg-theme text-white text-sm rounded-md transition-all transform shadow-sm ${
+                isDownloading ? 'opacity-75 cursor-not-allowed' : 'hover:bg-theme/90 hover:scale-102'
+              }`}
+            >
+              {isDownloading ? (
+                <>
+                  <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm">Downloading...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-1.5" />
+                  <span className="text-sm">Download Statement</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Metrics Cards */}
