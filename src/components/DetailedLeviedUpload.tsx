@@ -126,7 +126,7 @@ const DetailedLeviedUpload: React.FC = () => {
         
         switch (progress.status) {
             case 'processing':
-                setUploadStatus(`Processing: ${percentComplete}% complete (${progress.processedRecords}/${progress.totalRecords} records, Batch ${progress.currentBatch}/${progress.totalBatches})`);
+                setUploadStatus(`📤 Uploading: ${percentComplete}% complete (${progress.processedRecords}/${progress.totalRecords} records, Batch ${progress.currentBatch}/${progress.totalBatches} with rate limiting)`);
                 break;
             case 'completed':
                 // Update the last upload timestamp
@@ -134,10 +134,13 @@ const DetailedLeviedUpload: React.FC = () => {
                 const now = new Date();
                 const formattedDate = format(now, 'dd/MM/yyyy HH:mm');
                 setLastUpload(formattedDate);
-                setUploadStatus(`Upload completed: ${progress.processedRecords} records processed, ${progress.failedRecords} failed`);
+                const completedMessage = progress.failedRecords > 0 
+                    ? `✅ Upload completed: ${progress.processedRecords} records processed, ${progress.failedRecords} failed due to rate limits`
+                    : `✅ Upload completed: ${progress.processedRecords} records processed successfully`;
+                setUploadStatus(completedMessage);
                 break;
             case 'error':
-                setUploadStatus(`Error: ${progress.error || 'Unknown error occurred'}`);
+                setUploadStatus(`❌ Error: ${progress.error || 'Unknown error occurred'}`);
                 break;
         }
     };
@@ -283,8 +286,10 @@ const DetailedLeviedUpload: React.FC = () => {
             
             // Count unique account numbers for status display
             const uniqueAccounts = new Set(finalRecords.map(r => r.ACCOUNT_NO)).size;
-            console.log(`Prepared ${finalRecords.length} records grouped into ${uniqueAccounts} accounts for upload`);
-            setUploadStatus(`Uploading ${finalRecords.length} records grouped by ${uniqueAccounts} account numbers...`);
+            console.log(`📊 Prepared ${finalRecords.length} records grouped into ${uniqueAccounts} accounts for upload`);
+            console.log('🚀 Using optimized upload with rate limiting and retry logic');
+            console.log('⚙️ Features: 25 accounts/batch, 1s delays, exponential backoff retries');
+            setUploadStatus(`📤 Uploading ${finalRecords.length} records grouped by ${uniqueAccounts} account numbers (with rate limiting)...`);
 
             // Process the aggregated data and upload
             const result = await uploadDetailedLevied(
@@ -319,9 +324,18 @@ const DetailedLeviedUpload: React.FC = () => {
                     console.error('Error updating timestamp:', timestampError);
                 }
                 
-                setUploadStatus(`Upload successful: ${result.totalRecords} records processed`);
+                console.log(`✅ Upload successful: ${result.totalRecords} records processed`);
+                const successMessage = result.failedRecords > 0
+                    ? `✅ Upload completed: ${result.totalRecords} records processed (${result.failedRecords} failed due to rate limits - you may retry)`
+                    : `✅ Upload successful: ${result.totalRecords} records processed for ${selectedMonth?.name || ''}`;
+                setUploadStatus(successMessage);
+                
+                if (result.failedRecords > 0) {
+                    console.log(`⚠️ Note: ${result.failedRecords} records failed due to rate limiting - you may retry the upload`);
+                }
             } else {
-                setUploadStatus(`Upload failed: ${result.message}`);
+                console.error('❌ Upload failed:', result.message);
+                setUploadStatus(`❌ Upload failed: ${result.message}`);
             }
         } catch (error) {
             console.error('Error processing file:', error);

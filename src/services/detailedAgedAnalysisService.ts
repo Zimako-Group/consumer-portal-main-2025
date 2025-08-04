@@ -72,6 +72,49 @@ export const getMonthCollectionRef = (dateString: string) => {
     return collection(db, 'detailed_aged_analysis', year, month);
 };
 
+/**
+ * Helper function to implement exponential backoff delay
+ */
+const delay = (ms: number): Promise<void> => {
+    return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+/**
+ * Helper function to commit a batch with retry logic
+ */
+const commitBatchWithRetry = async (
+    batch: any, 
+    batchNumber: number, 
+    totalBatches: number, 
+    maxRetries: number = 3
+): Promise<void> => {
+    let retryCount = 0;
+    
+    while (retryCount <= maxRetries) {
+        try {
+            await batch.commit();
+            console.log(`✅ Committed batch ${batchNumber}/${totalBatches}`);
+            return;
+        } catch (error: any) {
+            const isRateLimited = 
+                error?.code === 'resource-exhausted' || 
+                error?.message?.includes('rate') ||
+                error?.message?.includes('quota') ||
+                error?.message?.includes('limit');
+            
+            if (isRateLimited && retryCount < maxRetries) {
+                retryCount++;
+                const backoffDelay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000); // Max 10 seconds
+                console.log(`⚠️ Rate limited on batch ${batchNumber}, retrying in ${backoffDelay/1000} seconds... (attempt ${retryCount}/${maxRetries})`);
+                await delay(backoffDelay);
+            } else {
+                console.error(`❌ Failed to commit batch ${batchNumber} after ${retryCount} retries:`, error);
+                throw error;
+            }
+        }
+    }
+};
+
 export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[], uploadDate: string, progressCallback?: (progress: number) => void): Promise<UploadResult> => {
     try {
         // Check if db is initialized
@@ -85,7 +128,7 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
         // Extract year and month for logging and additional fields
         const { year, month } = validateAndFormatDate(uploadDate);
         
-        console.log(`Uploading to collection: detailed_aged_analysis/${year}/${month}`);
+        console.log(`📤 Starting upload to collection: detailed_aged_analysis/${year}/${month}`);
 
         // Group records by account number
         const recordsByAccount: { [accountNumber: string]: DetailedAgedAnalysis[] } = {};
@@ -96,7 +139,7 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
             
             // Skip records with empty or invalid account numbers
             if (!accountNumber || accountNumber === '' || accountNumber === 'undefined' || accountNumber === 'null') {
-                console.warn('Skipping record with empty/invalid account number:', record);
+                console.warn('⚠️ Skipping record with empty/invalid account number:', record);
                 skippedRecords++;
                 continue;
             }
@@ -108,26 +151,36 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
         }
         
         if (skippedRecords > 0) {
-            console.warn(`Skipped ${skippedRecords} records with empty/invalid account numbers`);
+            console.warn(`⚠️ Skipped ${skippedRecords} records with empty/invalid account numbers`);
         }
         
-        console.log(`Grouped ${records.length} records into ${Object.keys(recordsByAccount).length} unique accounts`);
+        console.log(`📊 Grouped ${records.length} records into ${Object.keys(recordsByAccount).length} unique accounts`);
+        
+        // Optimized batch settings for rate limiting
+        const batchSize = 25; // Reduced from 500 to avoid overwhelming Firestore
+        const batchDelay = 1000; // 1 second delay between batches
+        const totalAccounts = Object.keys(recordsByAccount).length;
+        const totalBatches = Math.ceil(totalAccounts / batchSize);
+        
+        console.log(`🚀 Starting upload of ${totalAccounts} unique accounts in ${totalBatches} batches...`);
+        console.log(`⚙️ Batch size: ${batchSize} accounts, Delay: ${batchDelay}ms between batches`);
         
         let batch = writeBatch(db);
         let count = 0;
         let failed = 0;
         let batchCount = 0;
-        const batchSize = 500; // Firestore batch limit
-        const totalAccounts = Object.keys(recordsByAccount).length;
+        let currentBatchNumber = 1;
         
-        console.log(`Starting upload of ${totalAccounts} unique accounts...`);
+        const accountEntries = Object.entries(recordsByAccount);
         
         // Process each account
-        for (const [accountNumber, accountRecords] of Object.entries(recordsByAccount)) {
+        for (let i = 0; i < accountEntries.length; i++) {
+            const [accountNumber, accountRecords] = accountEntries[i];
+            
             try {
                 // Validate account number before using as document ID
                 if (!accountNumber || accountNumber.trim() === '') {
-                    console.warn('Skipping account with empty account number:', accountRecords[0]);
+                    console.warn('⚠️ Skipping account with empty account number:', accountRecords[0]);
                     failed += accountRecords.length;
                     continue;
                 }
@@ -163,37 +216,55 @@ export const uploadDetailedAgedAnalysis = async (records: DetailedAgedAnalysis[]
                     progressCallback(Math.round((count / totalAccounts) * 100));
                 }
                 
-                // Commit batch when it reaches the limit and create a new batch
-                if (batchCount >= batchSize) {
-                    await batch.commit();
-                    console.log(`Committed batch ${Math.ceil(count / batchSize)}: ${count}/${totalAccounts} accounts processed`);
-                    
-                    // Create a new batch for the next set of records
-                    batch = writeBatch(db);
-                    batchCount = 0;
+                // Commit batch when it reaches the limit
+                if (batchCount >= batchSize || i === accountEntries.length - 1) {
+                    try {
+                        await commitBatchWithRetry(batch, currentBatchNumber, totalBatches);
+                        console.log(`📈 Progress: ${count}/${totalAccounts} accounts processed (${Math.round((count / totalAccounts) * 100)}%)`);
+                        
+                        // Only create new batch and add delay if not the last batch
+                        if (i < accountEntries.length - 1) {
+                            // Create a new batch for the next set of records
+                            batch = writeBatch(db);
+                            batchCount = 0;
+                            currentBatchNumber++;
+                            
+                            // Add delay between batches to respect rate limits
+                            console.log(`⏱️ Waiting ${batchDelay}ms before next batch...`);
+                            await delay(batchDelay);
+                        }
+                    } catch (error) {
+                        console.error(`❌ Failed to commit batch ${currentBatchNumber}:`, error);
+                        // Count all accounts in this batch as failed
+                        failed += batchCount;
+                        
+                        // Create new batch to continue with remaining records
+                        if (i < accountEntries.length - 1) {
+                            batch = writeBatch(db);
+                            batchCount = 0;
+                            currentBatchNumber++;
+                        }
+                    }
                 }
             } catch (error) {
-                console.error(`Error processing account ${accountNumber}:`, error);
+                console.error(`❌ Error processing account ${accountNumber}:`, error);
                 failed += accountRecords.length;
             }
         }
         
-        // Commit any remaining records
-        if (batchCount > 0) {
-            await batch.commit();
-            console.log(`Committed final batch: ${count}/${totalAccounts} accounts processed`);
-        }
-        
-        console.log(`Upload complete! Total accounts processed: ${count}, Failed: ${failed}`);
+        const successfulUploads = count - failed;
+        console.log(`🎉 Upload complete! Total accounts processed: ${count}, Successful: ${successfulUploads}, Failed: ${failed}`);
 
         return {
-            success: true,
-            message: `Successfully uploaded ${count} records for ${month}/${year}`,
-            totalRecords: count,
+            success: successfulUploads > 0,
+            message: failed > 0 
+                ? `Uploaded ${successfulUploads} records for ${month}/${year} (${failed} failed due to rate limiting)` 
+                : `Successfully uploaded ${successfulUploads} records for ${month}/${year}`,
+            totalRecords: successfulUploads,
             failedRecords: failed
         };
     } catch (error) {
-        console.error('Error uploading detailed aged analysis:', error);
+        console.error('❌ Error uploading detailed aged analysis:', error);
         return {
             success: false,
             message: `Failed to upload detailed aged analysis data: ${error instanceof Error ? error.message : 'Unknown error'}`,

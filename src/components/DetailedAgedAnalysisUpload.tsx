@@ -178,8 +178,12 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                 return;
             }
 
-            console.log(`Processing ${data.length} records for upload for ${selectedMonth.label}`);
+            console.log(`📊 Processing ${data.length} records for upload for ${selectedMonth.label}`);
             toast.loading(`Processing ${data.length} records for ${selectedMonth.label}...`, { id: 'upload' });
+            
+            // Inform user about optimized upload process
+            console.log('🚀 Using optimized upload with rate limiting and retry logic');
+            console.log('⚙️ Features: 25 records/batch, 1s delays, exponential backoff retries');
 
             // Helper function to safely process amounts to numbers
             const processAmount = (value: any): number => {
@@ -287,28 +291,41 @@ const DetailedAgedAnalysisUpload: React.FC = () => {
                 };
             });
 
-            // Use the updated service function with month selection
+            // Use the updated service function with month selection and enhanced progress feedback
             const result = await uploadDetailedAgedAnalysis(
                 transformedRecords, 
                 selectedMonth?.value || '',
                 (progress) => {
                     setUploadProgress(progress);
-                    if (progress % 10 === 0 || progress === 100) {
-                        toast.loading(`Processed ${progress}% complete`, { id: 'upload' });
+                    if (progress % 5 === 0 || progress === 100) {
+                        const message = progress === 100 
+                            ? 'Finalizing upload...' 
+                            : `Uploading: ${progress}% complete (with rate limiting)`;
+                        toast.loading(message, { id: 'upload' });
                     }
                 }
             );
 
             if (result.success) {
-                console.log(`Successfully processed ${result.totalRecords} records`);
+                console.log(`✅ Successfully processed ${result.totalRecords} records`);
                 setUploadProgress(100);
                 setUploadSuccess(true);
-                toast.success(`Upload complete! Processed ${result.totalRecords} records for ${selectedMonth?.label || ''}`);
+                
+                // Enhanced success message with failure info if applicable
+                const successMessage = result.failedRecords && result.failedRecords > 0
+                    ? `Upload complete! Processed ${result.totalRecords} records (${result.failedRecords} failed due to rate limits)`
+                    : `Upload complete! Successfully processed ${result.totalRecords} records for ${selectedMonth?.label || ''}`;
+                    
+                toast.success(successMessage, { duration: 5000 });
+                
+                if (result.failedRecords && result.failedRecords > 0) {
+                    console.log(`⚠️ Note: ${result.failedRecords} records failed due to rate limiting - you may retry the upload`);
+                }
             } else {
-                console.error('Upload failed:', result.message);
+                console.error('❌ Upload failed:', result.message);
                 setErrorMessage(result.message);
                 setUploadSuccess(false);
-                toast.error(`Upload failed: ${result.message}`);
+                toast.error(`Upload failed: ${result.message}`, { duration: 6000 });
             }
 
             // Update last upload timestamp
