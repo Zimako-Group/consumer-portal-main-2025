@@ -352,7 +352,8 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string, year: 
             return [];
         }
         
-        console.log(`Fetching detailed levied data for account ${accountNumber} in ${year}/${month}`);
+        console.log(`📋 Fetching detailed levied data for account ${accountNumber} in ${year}/${month}`);
+        console.log(`📂 Collection path: detailed_levied/${year}/${month.padStart(2, '0')}`);
         
         // Initialize result array
         const accountDetails: AccountDetailsData[] = [];
@@ -362,9 +363,30 @@ export const getDetailedLeviedForCustomer = async (accountNumber: string, year: 
         // Records are now nested in a 'records' array within the account document
         try {
             const monthCollectionRef = getMonthCollectionRef(`${year}-${month.padStart(2, '0')}`);
+            console.log(`🔍 Querying collection reference for: ${year}-${month.padStart(2, '0')}`);
             const docSnap = await getDocs(monthCollectionRef);
             
-            console.log(`Searching for account ${accountNumber} in ${docSnap.size} documents`);
+            console.log(`📊 Found ${docSnap.size} documents in collection detailed_levied/${year}/${month.padStart(2, '0')}`);
+            if (docSnap.size === 0) {
+                console.log(`⚠️ No documents found in collection - this might indicate no data uploaded for ${year}/${month}`);
+                
+                // Let's also check if there are any documents in the year collection
+                console.log('🔍 Checking what collections exist in the year level...');
+                try {
+                    const yearCollectionRef = collection(db, 'detailed_levied', year);
+                    const yearDocSnap = await getDocs(yearCollectionRef);
+                    console.log(`📊 Found ${yearDocSnap.size} documents/subcollections in detailed_levied/${year}`);
+                    
+                    if (!yearDocSnap.empty) {
+                        console.log('📝 Documents found in year collection:');
+                        yearDocSnap.forEach((doc) => {
+                            console.log(`  - Document ID: ${doc.id}`);
+                        });
+                    }
+                } catch (yearError) {
+                    console.log('❌ Error checking year collection:', yearError);
+                }
+            }
             
             // Look for the account document
             docSnap.forEach((doc: any) => {

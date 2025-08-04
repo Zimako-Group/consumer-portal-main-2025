@@ -139,7 +139,17 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const year = typeof input === 'object' ? input.year : currentDate.getFullYear().toString();
       const month = typeof input === 'object' ? input.month : (currentDate.getMonth() + 1).toString().padStart(2, '0');
       
-      console.log('Fetching customer details for account:', accountNumber, 'Year:', year, 'Month:', month);
+      console.log('=== STATEMENT GENERATION DEBUG ===');
+      console.log('Input type:', typeof input);
+      console.log('Input object:', input);
+      console.log('Extracted account number:', accountNumber);
+      console.log('Extracted year:', year);
+      console.log('Extracted month:', month);
+      console.log('Expected Firestore paths:');
+      console.log(`  - detailed_levied/${year}/${month.padStart(2, '0')}/${accountNumber}`);
+      console.log(`  - detailed_aged_analysis/${year}/${month.padStart(2, '0')}/${accountNumber}`);
+      console.log(`  - balanceReports/${year}/${month.padStart(2, '0')}/${accountNumber}`);
+      console.log('=== END DEBUG INFO ===');
       
       // Get customer document from Firestore
       if (!db) {

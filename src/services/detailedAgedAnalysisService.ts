@@ -290,12 +290,46 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
         }
         
         console.log('=== AGING ANALYSIS FETCH START ===');
-        console.log('Account Number:', accountNumber);
-        console.log('Account Number Type:', typeof accountNumber);
-        console.log('Year:', year, 'Month:', month);
+        console.log(`📊 Fetching aging analysis for account: ${accountNumber}`);
+        console.log(`📅 Year: ${year}, Month: ${month}`);
+        console.log(`📂 Collection path: detailed_aged_analysis/${year}/${month.padStart(2, '0')}`);
         
-        // Normalize account number - trim and convert to string
-        const normalizedAccountNumber = String(accountNumber).trim();
+        // Get collection reference using helper function
+        const monthCollectionRef = getMonthCollectionRef(`${year}-${month.padStart(2, '0')}`);
+        
+        // Get all documents in the month collection
+        const docSnap = await getDocs(monthCollectionRef);
+        console.log(`📋 Found ${docSnap.size} documents in aging analysis collection`);
+        
+        if (docSnap.empty) {
+            console.log('⚠️ No documents found in aging analysis collection - this might indicate no data uploaded for this period');
+            
+            // Let's also check if there are any documents in the year collection
+            console.log('🔍 Checking what collections exist in the year level...');
+            try {
+                const yearCollectionRef = collection(db, 'detailed_aged_analysis', year);
+                const yearDocSnap = await getDocs(yearCollectionRef);
+                console.log(`📊 Found ${yearDocSnap.size} documents/subcollections in detailed_aged_analysis/${year}`);
+                
+                if (!yearDocSnap.empty) {
+                    console.log('📝 Documents found in year collection:');
+                    yearDocSnap.forEach((doc) => {
+                        console.log(`  - Document ID: ${doc.id}`);
+                    });
+                }
+            } catch (yearError) {
+                console.log('❌ Error checking year collection:', yearError);
+            }
+            
+            return {
+                hundredTwentyPlusDays: 0,
+                ninetyDays: 0,
+                sixtyDays: 0,
+                thirtyDays: 0,
+                current: 0,
+                closingBalance: 0
+            };
+        }
         
         // Initialize aging data
         let agingData: AgingAnalysisData = {
@@ -311,7 +345,7 @@ export const getAgingAnalysisForCustomer = async (accountNumber: string, year: s
         
         // Try multiple account number variations to handle different storage formats
         const accountVariations = [
-            normalizedAccountNumber,
+            String(accountNumber).trim(),
             accountNumber, // Original as passed
             String(accountNumber).trim(),
             accountNumber.toString().trim()
