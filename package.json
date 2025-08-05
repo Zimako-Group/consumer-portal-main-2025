@@ -38,6 +38,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/react-scroll": "^1.8.10",
     "@types/react-window": "^1.8.8",
+    "@types/uuid": "^10.0.0",
     "apexcharts": "^3.54.1",
     "appwrite": "^13.0.2",
     "axios": "^1.7.9",
@@ -79,6 +80,7 @@
     "recharts": "^2.13.3",
     "resend": "^4.7.0",
     "twilio": "^5.3.6",
+    "uuid": "^11.1.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

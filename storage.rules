@@ -1,12 +1,29 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    // Default rule - allow read access to all users
     match /{allPaths=**} {
-      allow read, write: if false;
+      // Allow anyone to read files (public access)
+      allow read: if true;
+      
+      // Allow authenticated users to write files
+      allow write: if request.auth != null;
+    }
+    
+    // Special rule for statement distribution PDFs - more permissive for uploads
+    match /statement_distributions/{fileName} {
+      // Allow anyone to read files
+      allow read: if true;
+      
+      // More permissive write rule for statement distributions
+      // This allows uploads even if metadata is missing or incomplete
+      allow write, create, update, delete: if request.auth != null;
+    }
+    
+    // Temporary rule to help debug CORS issues - consider removing after testing
+    match /temp_uploads/{fileName} {
+      allow read, write: if true;
     }
   }
 }

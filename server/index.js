@@ -3,6 +3,9 @@ const cors = require('cors');
 const { Resend } = require('resend');
 require('dotenv').config();
 
+// Import routes
+const uploadsRouter = require('./routes/uploads');
+
 const app = express();
 const port = process.env.PORT || 3001;
 
@@ -17,6 +20,9 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Email API server is running' });
 });
+
+// Use routes
+app.use('/api/uploads', uploadsRouter);
 
 // Send emails endpoint
 app.post('/api/send-emails', async (req, res) => {
