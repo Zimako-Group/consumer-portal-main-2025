@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -26,13 +26,11 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard'));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
 const CustomerDashboard = lazy(() => import('./components/CustomerDashboard'));
-const StatementGenerator = lazy(() => import('./components/StatementGenerator'));
 const PaymentConfirmation = lazy(() => import('./components/PaymentConfirmation'));
 const TrainingPage = lazy(() => import('./pages/train-model'));
-const ModelTester = lazy(() => import('./chatbot-data/ModelTester'));
-const ChatInterface = lazy(() => import('./chatbot-data/ChatInterface'));
 const FloatingHelpButton = lazy(() => import('./components/FloatingHelpButton'));
 const QuickStatementDownload = lazy(() => import('./components/QuickStatementDownload'));
+const ExportCustomersPage = lazy(() => import('./pages/ExportCustomersPage'));
 
 interface User {
   email: string;
@@ -339,6 +337,15 @@ function App() {
                       </Suspense>
                     }
                   />
+                }
+              />
+
+              <Route
+                path="/export-customers"
+                element={
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <ExportCustomersPage />
+                  </Suspense>
                 }
               />
               

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Send, Users, CheckCircle, AlertCircle, Clock, Eye, History } from 'lucide-react';
+import { Mail, Send, Users, CheckCircle, AlertCircle, Clock, Eye, History, RotateCcw } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../firebaseConfig';
 import { collection, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { sendBulkEmails as sendBulkEmailsService, BulkEmailData } from '../services/emailService';
-import { logEmailBatch, generateBatchId, getEmailStats, EmailStats } from '../services/emailLogService';
+import { logEmailBatch, generateBatchId, getEmailStats, EmailStats, resetEmailData } from '../services/emailLogService';
 
 interface Customer {
   accountNumber: string;
@@ -21,6 +21,20 @@ interface EmailTemplate {
   content: string;
   type: 'statement_notification' | 'payment_reminder' | 'custom';
 }
+
+const INITIAL_EMAIL_STATS = {
+  totalCustomers: 0,
+  customersWithEmail: 0,
+  emailsSent: 0,
+  selectedCount: 0
+};
+
+const INITIAL_HISTORICAL_STATS: EmailStats = {
+  totalEmailsSent: 0,
+  totalBatches: 0,
+  successRate: 0,
+  recentActivity: []
+};
 
 const BulkEmailDashboard: React.FC = () => {
   const { isDarkMode } = useTheme();
@@ -72,28 +86,23 @@ Mohokare Local Municipality`,
   const [isSending, setIsSending] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [isSendingTest, setIsSendingTest] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [emailStats, setEmailStats] = useState({
-    totalCustomers: 0,
-    customersWithEmail: 0,
-    emailsSent: 0,
-    selectedCount: 0
+    ...INITIAL_EMAIL_STATS
   });
   const [historicalStats, setHistoricalStats] = useState<EmailStats>({
-    totalEmailsSent: 0,
-    totalBatches: 0,
-    successRate: 0,
-    recentActivity: []
+    ...INITIAL_HISTORICAL_STATS
   });
   const [showHistory, setShowHistory] = useState(false);
   
   // Auto-send functionality state
   const [isAutoSending, setIsAutoSending] = useState(false);
   const [autoSendInterval, setAutoSendInterval] = useState<NodeJS.Timeout | null>(null);
-  const [currentAutoIndex, setCurrentAutoIndex] = useState(1479); // Start from 1480 (0-based index)
+  const [currentAutoIndex, setCurrentAutoIndex] = useState(0); // Start from the first customer (0-based index)
   const [autoSendCount, setAutoSendCount] = useState(0);
   
   // Use ref to track the actual current index for the interval function
-  const currentAutoIndexRef = useRef(1479);
+  const currentAutoIndexRef = useRef(0);
   const autoSendCountRef = useRef(0);
 
   // Predefined email templates
@@ -423,11 +432,11 @@ The Zimako Team`,
   };
 
   const resetAutoIndex = () => {
-    currentAutoIndexRef.current = 1479; // Reset to start from customer 1480
+    currentAutoIndexRef.current = 0; // Reset to start from the first customer
     autoSendCountRef.current = 0;
-    setCurrentAutoIndex(1479);
+    setCurrentAutoIndex(0);
     setAutoSendCount(0);
-    toast('Auto-send index reset to customer #1480');
+    toast('Auto-send index reset to customer #1');
   };
 
   // Cleanup interval on unmount
@@ -438,6 +447,51 @@ The Zimako Team`,
       }
     };
   }, [autoSendInterval]);
+
+  const handleResetDashboard = async () => {
+    if (isResetting) {
+      toast.error('Reset already in progress');
+      return;
+    }
+
+    setIsResetting(true);
+
+    const loadingToast = toast.loading('Resetting email dashboard data...');
+
+    try {
+      // Stop any ongoing auto-send processes
+      stopAutoSend();
+
+      // Reset auto-send trackers
+      currentAutoIndexRef.current = 0;
+      autoSendCountRef.current = 0;
+      setCurrentAutoIndex(0);
+      setAutoSendCount(0);
+
+      // Reset selections and template to defaults
+      setSelectedCustomers([]);
+      setEmailTemplate(templates[0]);
+
+      // Reset stats state
+      setEmailStats({ ...INITIAL_EMAIL_STATS });
+      setHistoricalStats({ ...INITIAL_HISTORICAL_STATS });
+
+      // Clear logged email data in Firestore
+      await resetEmailData();
+
+      // Refresh data from backend
+      await fetchCustomers();
+      await fetchEmailStats();
+
+      toast.success('Email dashboard has been reset. Ready to start fresh.');
+    } catch (error) {
+      console.error('❌ Error resetting dashboard:', error);
+      toast.error('Failed to reset dashboard. Please try again.');
+    } finally {
+      toast.dismiss(loadingToast);
+      setIsResetting(false);
+    }
+  };
 
   const handleTemplateChange = (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
@@ -1074,7 +1128,7 @@ The Zimako Team`;
                       : 'bg-blue-600 hover:bg-blue-700 text-white'
                   }`}
                 >
-                  🔄 Reset to #1480
+                  🔄 Reset to #1
                 </button>
               </div>
               
@@ -1095,17 +1149,33 @@ The Zimako Team`;
               <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-dark-text-primary' : 'text-gray-900'}`}>
                 Customer Selection
               </h2>
-              <button
-                onClick={fetchCustomers}
-                disabled={isLoading}
-                className={`px-3 py-1 text-sm rounded-lg ${
-                  isDarkMode 
-                    ? 'bg-dark-bg hover:bg-dark-hover text-dark-text-primary' 
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                } transition-colors`}
-              >
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResetDashboard}
+                  disabled={isResetting}
+                  className={`flex items-center gap-2 px-3 py-1 text-sm rounded-lg transition-colors ${
+                    isResetting
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : isDarkMode
+                        ? 'bg-red-900/20 text-red-300 hover:bg-red-900/30'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  {isResetting ? 'Resetting...' : 'Reset Dashboard'}
+                </button>
+                <button
+                  onClick={fetchCustomers}
+                  disabled={isLoading}
+                  className={`px-3 py-1 text-sm rounded-lg ${
+                    isDarkMode 
+                      ? 'bg-dark-bg hover:bg-dark-hover text-dark-text-primary' 
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  } transition-colors`}
+                >
+                  {isLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
             </div>
 
             {/* Selection Controls */}

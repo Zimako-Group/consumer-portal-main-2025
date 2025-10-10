@@ -1,5 +1,5 @@
 import { db } from '../firebaseConfig';
-import { collection, addDoc, getDocs, query, orderBy, limit, where, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, limit, where, Timestamp, deleteDoc, doc } from 'firebase/firestore';
 
 export interface EmailLog {
   id?: string;
@@ -270,4 +270,29 @@ export const generateBatchId = (): string => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const random = Math.random().toString(36).substring(2, 8);
   return `batch_${timestamp}_${random}`;
+};
+
+/**
+ * Reset email logs and batch history
+ */
+export const resetEmailData = async (): Promise<void> => {
+  if (!db) {
+    throw new Error('Database connection not available');
+  }
+
+  const dbInstance = db;
+  const collectionsToReset = ['emailLogs', 'emailBatches'];
+
+  for (const collectionName of collectionsToReset) {
+    const collectionRef = collection(dbInstance, collectionName);
+    const snapshot = await getDocs(collectionRef);
+
+    const deletions = snapshot.docs.map((document) =>
+      deleteDoc(doc(dbInstance, collectionName, document.id))
+    );
+
+    if (deletions.length > 0) {
+      await Promise.all(deletions);
+    }
+  }
 };
