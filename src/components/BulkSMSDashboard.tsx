@@ -276,6 +276,10 @@ const BulkSMSDashboard: React.FC = () => {
     }
   };
 
+  const totalRecipientsLoaded = recipients.length;
+  const successRate = currentStats.sent > 0 ? (currentStats.successful / currentStats.sent) * 100 : 0;
+  const failureRate = currentStats.sent > 0 ? (currentStats.failed / currentStats.sent) * 100 : 0;
+
   return (
     <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
       <div className="mb-6">
@@ -297,10 +301,10 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Recipients</p>
                 <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                  2680
+                  {totalRecipientsLoaded}
                 </p>
                 <p className="text-xs text-blue-500">
-                  Upload recipients
+                  {totalRecipientsLoaded === 0 ? 'No recipients loaded yet' : 'Recipients ready to send'}
                 </p>
               </div>
               <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-full">
@@ -315,10 +319,10 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-green-600 dark:text-green-400">Successful</p>
                 <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                  2454
+                  {currentStats.successful}
                 </p>
                 <p className="text-xs text-green-500">
-                  91.6% success rate
+                  {currentStats.sent > 0 ? `${successRate.toFixed(1)}% success rate` : 'No messages sent yet'}
                 </p>
               </div>
               <div className="p-2 bg-green-100 dark:bg-green-800 rounded-full">
@@ -333,10 +337,10 @@ const BulkSMSDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-red-600 dark:text-red-400">Failed</p>
                 <p className="text-2xl font-bold text-red-700 dark:text-red-300">
-                  226
+                  {currentStats.failed}
                 </p>
                 <p className="text-xs text-red-500">
-                  8.4% failure rate
+                  {currentStats.sent > 0 ? `${failureRate.toFixed(1)}% failure rate` : 'No failures recorded'}
                 </p>
               </div>
               <div className="p-2 bg-red-100 dark:bg-red-800 rounded-full">
