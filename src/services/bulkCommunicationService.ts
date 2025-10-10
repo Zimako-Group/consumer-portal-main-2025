@@ -178,7 +178,7 @@ export const sendBulkSMS = async (
       }
 
       try {
-        const response = await fetch(`${normalisedBaseUrl}/messages/send`, {
+        const response = await fetch(`${normalisedBaseUrl}/bulkmessages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -188,8 +188,7 @@ export const sendBulkSMS = async (
           body: JSON.stringify({
             Messages: preparedMessages.map(item => ({
               Content: item.content,
-              Destination: item.to,
-              From: senderId
+              Destination: item.to
             }))
           })
         });
