@@ -5,8 +5,8 @@
  * Automatically logs out users after a specified period of inactivity.
  */
 
-// Default timeout in milliseconds (5 minutes)
-const DEFAULT_TIMEOUT = 5 * 60 * 1000;
+// Default timeout in milliseconds (24 hours - extended for long-running operations like Auto-Send Mode)
+const DEFAULT_TIMEOUT = 24 * 60 * 60 * 1000;
 
 type SessionTimeoutCallback = () => void;
 
