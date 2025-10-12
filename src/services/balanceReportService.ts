@@ -101,6 +101,27 @@ const getMonthCollectionRef = (date: string) => {
   return collection(db, 'balanceReports', year, month);
 };
 
+// Helper function to remove empty fields from report data
+const cleanReportData = (report: any): any => {
+  const cleaned: any = {};
+  
+  for (const [key, value] of Object.entries(report)) {
+    // Skip empty strings, null, undefined, and empty objects
+    if (value === '' || value === null || value === undefined) {
+      continue;
+    }
+    
+    // Skip empty strings that might be whitespace only
+    if (typeof value === 'string' && value.trim() === '') {
+      continue;
+    }
+    
+    cleaned[key] = value;
+  }
+  
+  return cleaned;
+};
+
 export const uploadBalanceReports = async (
   reports: BalanceReport[],
   onProgress?: (progress: UploadProgress) => void
@@ -157,10 +178,13 @@ export const uploadBalanceReports = async (
         report.year = year;
         report.uploadTimestamp = new Date().toISOString();
 
+        // Clean the report data to remove empty fields
+        const cleanedReport = cleanReportData(report);
+
         // Use accountNumber as document ID (sanitize it to ensure it's valid)
         const sanitizedAccountNumber = report.accountNumber.toString().trim();
         const docRef = doc(monthCollectionRef, sanitizedAccountNumber);
-        batch.set(docRef, report);
+        batch.set(docRef, cleanedReport);
         
         progress.processedRecords++;
       }

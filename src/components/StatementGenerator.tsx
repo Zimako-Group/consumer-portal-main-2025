@@ -203,9 +203,13 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       // Extract closing balance from balance report
       // Handle both camelCase and uppercase field names
       const balanceReportAny = balanceReportData as any;
-      const closingBalanceFromReport = balanceReportData?.outstandingTotalBalance || 
+      const closingBalanceFromReportRaw = balanceReportData?.outstandingTotalBalance || 
                                      balanceReportAny?.['OUTSTANDING TOTAL BALANCE'] || 
                                      balanceReportAny?.['OUTSTANDING_TOTAL_BALANCE'] || 0;
+      // Ensure it's a number (Excel files might return strings)
+      const closingBalanceFromReport = typeof closingBalanceFromReportRaw === 'string' 
+        ? parseFloat(closingBalanceFromReportRaw) || 0 
+        : closingBalanceFromReportRaw;
       console.log('Closing balance from balance report (outstandingTotalBalance):', balanceReportData?.outstandingTotalBalance);
       console.log('Closing balance from balance report (OUTSTANDING TOTAL BALANCE):', balanceReportAny?.['OUTSTANDING TOTAL BALANCE']);
       console.log('Final closing balance from report:', closingBalanceFromReport);
@@ -753,7 +757,9 @@ class StatementGenerator extends React.Component<{}, StatementGeneratorState> {
       const days60 = agingAnalysisData?.days60?.toFixed(2) || customerData.aging60Days?.toFixed(2) || '0.00';
       const days30 = agingAnalysisData?.days30?.toFixed(2) || customerData.aging30Days?.toFixed(2) || '0.00';
       const current = agingAnalysisData?.current?.toFixed(2) || customerData.agingCurrent?.toFixed(2) || '0.00';
-      const closingBalanceFormatted = closingBalance?.toFixed(2) || '0.00';
+      // Ensure closingBalance is a number before calling toFixed
+      const closingBalanceNum = typeof closingBalance === 'string' ? parseFloat(closingBalance) || 0 : (closingBalance || 0);
+      const closingBalanceFormatted = closingBalanceNum.toFixed(2);
       
       console.log('Final aging analysis values for PDF:', { days120Plus, days90, days60, days30, current, closingBalanceFormatted });
       console.log('=== END AGING ANALYSIS DEBUG ===\n');
