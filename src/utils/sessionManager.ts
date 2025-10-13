@@ -39,6 +39,11 @@ class SessionManager {
    * Start monitoring user activity and session timeout
    */
   public startMonitoring(): void {
+    // DISABLED: Session timeout monitoring is currently disabled
+    console.log('⚠️ Session timeout monitoring is DISABLED - no automatic logout will occur');
+    return;
+    
+    /* ORIGINAL CODE - DISABLED
     this.lastActivity = Date.now(); // Reset last activity time when starting
     this.resetTimer();
     
@@ -54,6 +59,7 @@ class SessionManager {
       this.eventsBound = true;
       console.log('Session timeout monitoring started with duration:', this.timeoutDuration, 'ms');
     }
+    */
   }
 
   /**

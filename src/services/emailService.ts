@@ -153,13 +153,27 @@ export const sendBulkEmails = async (bulkEmailData: BulkEmailData, apiKey: strin
       throw fetchError;
     }
   } catch (error) {
-    console.error('Error sending bulk emails:', error);
+    console.error('❌ Error sending bulk emails:', error);
+    
+    // Log detailed error information
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    
+    // Check if it's a network error
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      console.error('🔌 Network error: Cannot connect to backend API at', API_BASE_URL);
+      console.error('💡 Make sure the backend server is running on port 3001');
+    }
     
     // Return error results for all recipients
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     const errorResults = bulkEmailData.recipients.map(recipient => ({
       email: recipient.email,
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: errorMessage
     }));
 
     return {
