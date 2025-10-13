@@ -165,6 +165,198 @@ const StatementDistributionRecords: React.FC = () => {
     }
   };
 
+  const updateJanuaryRecord = async () => {
+    try {
+      // Find the January 2025 record
+      const januaryRecords = distributions.filter(d => d.month === '01' && d.year === '2025');
+      
+      if (januaryRecords.length === 0) {
+        toast.error('January 2025 record not found');
+        return;
+      }
+      
+      const januaryRecord = januaryRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 4819;
+      const failureCount = 510;
+      
+      await updateStatementDistributionCounts(
+        januaryRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('January 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating January record:', error);
+      toast.error('Failed to update January record');
+    }
+  };
+
+  const updateFebruaryRecord = async () => {
+    try {
+      // Find the February 2025 record
+      const februaryRecords = distributions.filter(d => d.month === '02' && d.year === '2025');
+      
+      if (februaryRecords.length === 0) {
+        toast.error('February 2025 record not found');
+        return;
+      }
+      
+      const februaryRecord = februaryRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 5100;
+      const failureCount = 449;
+      
+      await updateStatementDistributionCounts(
+        februaryRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('February 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating February record:', error);
+      toast.error('Failed to update February record');
+    }
+  };
+
+  const updateMarchRecord = async () => {
+    try {
+      // Find the March 2025 record
+      const marchRecords = distributions.filter(d => d.month === '03' && d.year === '2025');
+      
+      if (marchRecords.length === 0) {
+        toast.error('March 2025 record not found');
+        return;
+      }
+      
+      const marchRecord = marchRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 4818;
+      const failureCount = 511;
+      
+      await updateStatementDistributionCounts(
+        marchRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('March 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating March record:', error);
+      toast.error('Failed to update March record');
+    }
+  };
+
+  const updateAprilRecord = async () => {
+    try {
+      // Find the April 2025 record
+      const aprilRecords = distributions.filter(d => d.month === '04' && d.year === '2025');
+      
+      if (aprilRecords.length === 0) {
+        toast.error('April 2025 record not found');
+        return;
+      }
+      
+      const aprilRecord = aprilRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 4812;
+      const failureCount = 514;
+      
+      await updateStatementDistributionCounts(
+        aprilRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('April 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating April record:', error);
+      toast.error('Failed to update April record');
+    }
+  };
+
+  const updateMayRecord = async () => {
+    try {
+      // Find the May 2025 record
+      const mayRecords = distributions.filter(d => d.month === '05' && d.year === '2025');
+      
+      if (mayRecords.length === 0) {
+        toast.error('May 2025 record not found');
+        return;
+      }
+      
+      const mayRecord = mayRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 4821;
+      const failureCount = 509;
+      
+      await updateStatementDistributionCounts(
+        mayRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('May 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating May record:', error);
+      toast.error('Failed to update May record');
+    }
+  };
+
+  const updateAugustRecord = async () => {
+    try {
+      // Find the August 2025 record
+      const augustRecords = distributions.filter(d => d.month === '08' && d.year === '2025');
+      
+      if (augustRecords.length === 0) {
+        toast.error('August 2025 record not found');
+        return;
+      }
+      
+      const augustRecord = augustRecords[0];
+      
+      // Update with the specified values
+      const totalStatements = 5329;
+      const successCount = 5054;
+      const failureCount = 273;
+      
+      await updateStatementDistributionCounts(
+        augustRecord.id!,
+        totalStatements,
+        successCount,
+        failureCount
+      );
+      
+      toast.success('August 2025 record updated successfully');
+      fetchDistributionRecords(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating August record:', error);
+      toast.error('Failed to update August record');
+    }
+  };
+
   const handleDelete = async (recordId: string) => {
     if (!recordId) return;
     

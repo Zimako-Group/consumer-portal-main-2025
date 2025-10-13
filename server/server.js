@@ -38,6 +38,7 @@ const resend = new Resend(RESEND_API_KEY);
 // Import routes
 const adminUsersRouter = require('./routes/adminUsers');
 const communicationsRouter = require('./routes/communications');
+const uploadsRouter = require('./routes/uploads');
 // const whatsappRouter = require('./routes/whatsapp'); // Commented out due to missing TypeScript service
 // const whatsappMessagesRouter = require('./routes/whatsappMessages'); // Commented out due to missing TypeScript service
 const adminRouter = require('./routes/admin');
@@ -45,6 +46,7 @@ const adminRouter = require('./routes/admin');
 // Use routes
 app.use('/api', adminUsersRouter);
 app.use('/api', communicationsRouter);
+app.use('/api/uploads', uploadsRouter);
 // app.use('/api/whatsapp', whatsappRouter); // Commented out due to missing TypeScript service
 // app.use('/api/whatsapp', whatsappMessagesRouter); // Commented out due to missing TypeScript service
 app.use('/api/admin', adminRouter);
