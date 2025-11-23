@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import AuthModal from './AuthModal';
-import defaultHero from '../assets/hero.jpg';
+import defaultHero from '../assets/hero.jpeg';
 
 const fadeIn = {
   initial: { opacity: 0, y: 20 },
@@ -69,10 +69,11 @@ const slides = [
 ];
 
 interface HeroProps {
-  onLoginSuccess?: () => void;
+  onLoginSuccess?: (email: string) => void;
+  onNewUserSignup?: (email: string, name: string) => void;
 }
 
-export default function Hero({ onLoginSuccess }: HeroProps) {
+export default function Hero({ onLoginSuccess, onNewUserSignup }: HeroProps) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoadErrors, setImageLoadErrors] = useState<Record<number, boolean>>({});
@@ -257,7 +258,8 @@ export default function Hero({ onLoginSuccess }: HeroProps) {
       <AuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
-        onLoginSuccess={onLoginSuccess}
+        onLoginSuccess={onLoginSuccess || (() => {})}
+        onNewUserSignup={onNewUserSignup || (() => {})}
       />
     </section>
   );

@@ -55,8 +55,8 @@
     "firebase-admin": "^13.5.0",
     "framer-motion": "^11.18.2",
     "json2csv": "^6.0.0-alpha.2",
-    "jspdf": "2.5.1",
-    "jspdf-autotable": "3.8.4",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lodash": "^4.17.21",
     "lucide-react": "^0.344.0",
     "node-fetch": "^2.6.1",
@@ -103,7 +103,7 @@
     "typescript-eslint": "^8.3.0",
     "vite": "^6.1.1",
     "vite-plugin-compression2": "^1.3.3",
-    "vite-plugin-imagemin": "^0.6.1"
+    "vite-plugin-imagemin": "^0.1.0"
   },
   "description": "A modern, feature-rich consumer portal built with React, TypeScript, and Vite for Mohokare Local Municipality. This portal enables customers to manage their accounts, view statements, make payments, and interact with municipal services.",
   "main": "eslint.config.js",
