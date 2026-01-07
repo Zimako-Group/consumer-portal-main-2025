@@ -11,6 +11,7 @@ import StatsCard from './StatsCard';
 import FeatureCard from './FeatureCard';
 import ZimakoAIChatBot from './ZimakoAIChatBot';
 import ActiveUsersCard from './analytics/ActiveUsersCard';
+import UserLoginAnalytics from './analytics/UserLoginAnalytics';
 import AdminMeterReadings from './AdminMeterReadings';
 import WhatsAppDashboard from './WhatsAppDashboard';
 import BulkSMSDashboard from './BulkSMSDashboard';
@@ -44,7 +45,7 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
     console.log('User Data:', userData);
   }, [currentUser, userData]);
 
-  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard' | 'login-analytics'>('dashboard');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [statsData, setStatsData] = useState([
     {
@@ -463,6 +464,10 @@ export default function SuperAdminDashboard({ onLogout }: { onLogout: () => void
               <BulkSMSDashboard />
             ) : currentView === 'bulk-email-dashboard' ? (
               <BulkEmailDashboard />
+            ) : currentView === 'login-analytics' ? (
+              <div className="p-8">
+                <UserLoginAnalytics />
+              </div>
             ) : (
               // Dashboard View with new greeting and stats cards
               <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">

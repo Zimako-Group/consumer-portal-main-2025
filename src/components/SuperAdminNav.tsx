@@ -18,15 +18,16 @@ import {
   UserPlus,
   Settings,
   Send,
-  Mail
+  Mail,
+  BarChart3
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
 interface SuperAdminNavProps {
   onLogout: () => void;
-  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard') => void;
-  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard';
+  onViewChange: (view: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard' | 'login-analytics') => void;
+  currentView: 'dashboard' | 'changelog' | 'reports' | 'customerdashboard' | 'queries' | 'createAdmin' | 'payment-reminder' | 'meter-readings' | 'whatsapp-dashboard' | 'bulk-sms-dashboard' | 'bulk-email-dashboard' | 'login-analytics';
 }
 
 interface NavItem {
@@ -61,7 +62,12 @@ const SuperAdminNav: React.FC<SuperAdminNavProps> = ({ onLogout, onViewChange })
       href: '#',
       action: () => onViewChange('reports')
     },
-
+    { 
+      name: 'Login Analytics', 
+      icon: <BarChart3 className="w-5 h-5" />, 
+      href: '#',
+      action: () => onViewChange('login-analytics')
+    },
     { 
       name: 'Payment Reminders', 
       icon: <Bell className="w-5 h-5" />, 
